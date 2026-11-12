@@ -139,6 +139,36 @@ class MobileSession:
             self.cfg.save(self.home)
         return ok
 
+    def add_backend(self, name: str, driver: str,
+                    options: Optional[Dict[str, Any]] = None
+                    ) -> Dict[str, Any]:
+        """Point the phone at somewhere to store blocks. Usually the same
+        backend the desktop already uses -- the manifest is shared, so both
+        devices write into one pool and deduplicate against each other."""
+        from ..core.driver import build_driver
+        if not name.strip():
+            raise ConfigError("a backend needs a name")
+        if self.m.backend_by_name(name):
+            raise ConfigError("a backend called " + name + " already exists")
+        config = {str(k): str(v) for k, v in (options or {}).items()}
+        build_driver(driver, config)        # fail now, not at first backup
+        bid = self.m.add_backend(name, driver, config)
+        return {"id": bid, "name": name, "driver": driver}
+
+    def set_credential(self, name: str, value: str) -> Dict[str, Any]:
+        """Store a backend token in the app's private directory. There is no
+        environment to read on a phone."""
+        from ..core import credstore
+        if not name.strip() or not value.strip():
+            raise ConfigError("both a name and a value are needed")
+        credstore.set_value(name.strip(), value.strip(), self.home)
+        return {"name": name.strip(), "stored": True}
+
+    def credentials(self) -> List[Dict[str, str]]:
+        from ..core import credstore
+        return [{"name": n, "source": credstore.sources(n, self.home)}
+                for n in credstore.names(self.home)]
+
     def status(self) -> Dict[str, Any]:
         last = self.m.latest_snapshot(self.cfg.device)
         return {

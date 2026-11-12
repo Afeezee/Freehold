@@ -37,3 +37,19 @@ htmlcov/
 *.swp
 .DS_Store
 Thumbs.db
+
+# Build output
+dist/
+build/
+*.spec.bak
+
+# Android
+android/.gradle/
+android/build/
+android/app/build/
+android/local.properties
+*.jks
+*.keystore
+
+# Credentials store (belt and braces; it lives in FREEHOLD_HOME, not here)
+credentials.json

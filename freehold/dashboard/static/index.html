@@ -56,6 +56,7 @@
       <input name="options" placeholder="key=value key=value">
       <small id="driver-help"></small>
     </label>
+    <div id="secret-fields"></div>
     <div class="row">
       <button type="submit">Add</button>
       <button type="button" id="cancel-add" class="link">Cancel</button>
@@ -64,6 +65,17 @@
   </form>
 
   <div id="backend-cards"></div>
+
+  <details id="creds">
+    <summary>Stored credentials</summary>
+    <p class="note">Tokens are read from your environment first, then from
+      <code>credentials.json</code> in your Freehold folder. Values are
+      never shown here, or sent anywhere except the backend they belong to.</p>
+    <table>
+      <thead><tr><th>Name</th><th>Where it comes from</th><th></th></tr></thead>
+      <tbody id="cred-rows"></tbody>
+    </table>
+  </details>
 </section>
 
 <section id="restore">

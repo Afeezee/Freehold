@@ -56,8 +56,9 @@ def _conditions(payload: Dict[str, Any]) -> Conditions:
     )
 
 
-COMMANDS = ("enrol", "status", "add_folder", "remove_folder", "should_sync",
-            "sync", "snapshots", "browse", "restore", "close")
+COMMANDS = ("enrol", "status", "add_folder", "remove_folder", "add_backend",
+            "set_credential", "credentials", "should_sync", "sync",
+            "snapshots", "browse", "restore", "close")
 
 
 def _dispatch(payload: Dict[str, Any]) -> Dict[str, Any]:
@@ -87,6 +88,15 @@ def _dispatch(payload: Dict[str, Any]) -> Dict[str, Any]:
                                   int(payload.get("interval", 3600)))
     if cmd == "remove_folder":
         return {"removed": session.remove_folder(str(payload["path"]))}
+    if cmd == "add_backend":
+        return session.add_backend(str(payload["name"]),
+                                   str(payload["driver"]),
+                                   payload.get("options") or {})
+    if cmd == "set_credential":
+        return session.set_credential(str(payload["name"]),
+                                      str(payload["value"]))
+    if cmd == "credentials":
+        return {"credentials": session.credentials()}
     if cmd == "should_sync":
         ok, why = session.should_sync(_conditions(payload))
         return {"should_sync": ok, "reason": why}

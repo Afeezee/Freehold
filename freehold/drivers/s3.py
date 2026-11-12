@@ -11,6 +11,7 @@ import os
 import threading
 from typing import Any, Dict, Iterator, List, Optional
 
+from ..core import credstore
 from ..core.driver import BackendStats, StorageDriver, register
 from ..core.errors import ConfigError
 from .s3api import S3API
@@ -57,11 +58,11 @@ class S3Driver(StorageDriver):
         if value:
             return value
         env = self.config.get(env_opt) or env_default
-        value = os.environ.get(env, "")
+        value = credstore.get(env)      # environment, then credentials.json
         if not value:
             raise ConfigError(
-                "no S3 credentials: set " + env + ", or pass " + inline
-                + "=<value> (an env var keeps it out of the manifest)")
+                "no S3 credentials. Set the " + env + " environment "
+                "variable, or save it with: freehold credentials set " + env)
         return value
 
     # -- private bookkeeping ---------------------------------------------

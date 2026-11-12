@@ -10,6 +10,7 @@ from __future__ import annotations
 import json
 import mimetypes
 import secrets
+import sys
 import threading
 from dataclasses import asdict
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -20,7 +21,18 @@ from urllib.parse import parse_qs, urlparse
 from ..core.errors import FreeholdError
 from .api import DashboardAPI
 
-STATIC = Path(__file__).parent / "static"
+def _static_dir() -> Path:
+    """Where the page lives. Inside a PyInstaller bundle that is the
+    unpacked temp directory, not next to this source file."""
+    bundled = getattr(sys, "_MEIPASS", None)
+    if bundled:
+        packed = Path(bundled) / "freehold" / "dashboard" / "static"
+        if packed.is_dir():
+            return packed
+    return Path(__file__).parent / "static"
+
+
+STATIC = _static_dir()
 MAX_BODY = 1 << 20
 
 
@@ -119,6 +131,8 @@ class Handler(BaseHTTPRequestHandler):
                                                q.get("root") or None)}
         if path == "/api/tree":
             return api.tree(int(q.get("snapshot", "0")), q.get("prefix", ""))
+        if path == "/api/credentials":
+            return {"credentials": api.credentials()}
         if path == "/api/jobs":
             return {"jobs": [asdict(j) for j in api.jobs()]}
         if path.startswith("/api/jobs/"):
@@ -142,6 +156,11 @@ class Handler(BaseHTTPRequestHandler):
             return 200, {"ok": True}
         if path == "/api/backends/check":
             return 200, api.check_backend(str(body["name"]))
+        if path == "/api/credentials":
+            return 200, api.set_credential(str(body.get("name", "")),
+                                           str(body.get("value", "")))
+        if path == "/api/credentials/remove":
+            return 200, api.remove_credential(str(body["name"]))
         if path == "/api/restore":
             job = api.start_restore(int(body["snapshot"]),
                                     str(body.get("dest", "")),

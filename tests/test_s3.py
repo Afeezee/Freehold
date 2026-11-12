@@ -231,14 +231,22 @@ def test_second_backend_needed_no_core_changes(tmp_path, srv):
 
 
 def test_driver_touches_only_the_driver_interface():
-    """The driver may import the interface and the error types, nothing else
-    from core. No reaching into the engine or the manifest."""
+    """A driver may use the interface, the error types and the credential
+    store — all of which are generic. It may not reach into the engine or
+    the manifest, which is where vendor knowledge would start to leak."""
     import inspect
     import re
     from freehold.drivers import s3api
+    allowed_modules = {"core.driver", "core.errors"}
+    allowed_from_core = {"credstore"}
     for mod in (s3mod, s3api):
         src = inspect.getsource(mod)
-        reached = {a or b for a, b in re.findall(
-            r"^from \.\.([\w.]+) import|^import \.\.([\w.]+)", src, re.M)}
-        assert reached <= {"core.driver", "core.errors"}, (mod.__name__,
-                                                           reached)
+        for line in re.findall(r"^from \.\.([\w.]+) import (.+)$", src, re.M):
+            module, names = line[0], {n.strip() for n in line[1].split(",")}
+            if module == "core":
+                assert names <= allowed_from_core, (mod.__name__, names)
+            else:
+                assert module in allowed_modules, (mod.__name__, module)
+        assert not re.search(r"^import \.\.", src, re.M)
+        for forbidden in ("core.engine", "core.manifest", "core.chunker"):
+            assert forbidden not in src, (mod.__name__, forbidden)

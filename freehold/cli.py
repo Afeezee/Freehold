@@ -207,6 +207,42 @@ def cmd_restore(args) -> int:
     return 0 if res.ok else 2
 
 
+def cmd_credentials(args) -> int:
+    """Store a backend secret for people who do not live in a terminal."""
+    import getpass
+    from .core import credstore
+    h = home(args)
+
+    if args.credentials_cmd == "list":
+        stored = credstore.names(h)
+        for known in ("FREEHOLD_GITHUB_TOKEN", "FREEHOLD_S3_ACCESS_KEY_ID",
+                      "FREEHOLD_S3_SECRET_ACCESS_KEY"):
+            if known not in stored:
+                stored.append(known)
+        for name in sorted(set(stored)):
+            print("%-34s %s" % (name, credstore.sources(name, h)))
+        print("\nvalues are never printed; " + str(credstore.path(h)))
+        return 0
+
+    if args.credentials_cmd == "set":
+        value = args.value or getpass.getpass("value for " + args.name
+                                              + " (not shown): ")
+        if not value.strip():
+            raise FreeholdError("nothing entered")
+        p = credstore.set_value(args.name, value.strip(), h)
+        print("saved " + args.name + " to " + str(p))
+        print("This file is readable by your user account. Keep it off "
+              "shared machines.")
+        return 0
+
+    if args.credentials_cmd == "remove":
+        if not credstore.unset(args.name, h):
+            raise FreeholdError(args.name + " was not stored")
+        print("removed " + args.name)
+        return 0
+    return 0
+
+
 def cmd_manifest(args) -> int:
     from .core.driver import build_driver
     from .core.manifest import ManifestState
@@ -512,6 +548,21 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--overwrite", action="store_true",
                    help="replace existing files instead of restoring beside")
     s.set_defaults(fn=cmd_restore)
+
+    s = sub.add_parser("credentials", help="store backend tokens without "
+                                            "environment variables")
+    cs = s.add_subparsers(dest="credentials_cmd", required=True)
+    cs.add_parser("list", help="which secrets are set, and from where"
+                  ).set_defaults(fn=cmd_credentials)
+    cset = cs.add_parser("set", help="store a secret (prompts, not echoed)")
+    cset.add_argument("name", help="e.g. FREEHOLD_GITHUB_TOKEN")
+    cset.add_argument("value", nargs="?",
+                      help="omit this and you will be prompted, which keeps "
+                           "it out of your shell history")
+    cset.set_defaults(fn=cmd_credentials)
+    crm = cs.add_parser("remove")
+    crm.add_argument("name")
+    crm.set_defaults(fn=cmd_credentials)
 
     s = sub.add_parser("manifest", help="put the manifest in the backends, "
                                         "or get it back on a new machine")

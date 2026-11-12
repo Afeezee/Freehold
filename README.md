@@ -66,23 +66,36 @@ Three consequences worth stating up front:
 
 ## Do I need an .exe? Is it a website?
 
-Short answer: **right now Freehold is a command-line program plus a local web
-page. There is no installer, no `.exe`, and no mobile app yet.**
-
 | What you might expect | What exists today |
 |---|---|
-| A Windows `.exe` you double-click | Not yet. You run it with Python: `python -m freehold.cli …`. It can be packaged into a single `.exe` with PyInstaller — nothing in the design prevents it, it just has not been done. |
-| A website you log into | **No, and deliberately not.** There is no Freehold server, no account, no cloud. Nothing of yours touches any machine I control. |
-| A web page | Yes — but it runs **on your own computer**. `freehold dashboard` starts a small server on `127.0.0.1` and you open it in your browser. It is not reachable from the internet. |
-| A phone app | Not yet. The shared library a phone app would use is built and tested; the app itself is not. Android is practical today, iOS needs more work. See [Mobile](#mobile). |
+| A Windows `.exe` you double-click | **Yes.** A single 14 MB `Freehold.exe`, no Python needed. Double-click it and it sets itself up, starts the dashboard and opens your browser. Run it with arguments and it is the full command line instead. |
+| A website you log into | **No, and deliberately not.** There is no Freehold server, no account, no cloud. Nothing of yours touches any machine belonging to anyone else. |
+| A web page | Yes — but it runs **on your own computer**, on `127.0.0.1`, protected by a token printed at startup. Not reachable from the internet. |
+| A phone app | **Android: yes, as a buildable project** that CI turns into an APK — written but not yet run on a handset. **iOS: no**, and that needs the engine ported to another language first. See [Mobile](#mobile). |
 
-So: a **desktop tool**, driven from a terminal, with a **local** web page for
-browsing and restoring. If you want the double-clickable version, that is a
-packaging job and a reasonable next step.
+So: a **desktop app** with a local web interface, which also happens to be a
+proper command-line tool for anyone who wants one.
 
 ---
 
 ## Install
+
+### The easy way (Windows)
+
+Download `Freehold.exe` from the
+[releases page](https://github.com/Afeezee/Freehold/releases) and
+double-click it. Nothing else to install.
+
+On first run it creates your encryption key, prints where it is, and opens
+the dashboard in your browser. **Copy that key file somewhere safe before you
+do anything else.**
+
+Windows will likely show "Windows protected your PC" because the file is not
+code-signed. Click *More info* → *Run anyway*. That warning appears for every
+unsigned program from a small project; signing costs a few hundred dollars a
+year.
+
+### From source (any platform)
 
 You need **Python 3.9 or newer**. Check with `python --version`.
 
@@ -181,7 +194,24 @@ cannot create repositories, and Freehold creates them as the pool grows.
    you want Freehold's test scripts to be able to clean up after themselves.
 4. Copy the token — GitHub shows it once.
 
-Put it in your environment, not in a file:
+**Where to put it.** Two options, and Freehold checks them in this order:
+
+```bash
+# Option 1 — save it once, in Freehold's own folder. Best if you use the
+# .exe or do not want to fiddle with environment variables.
+python -m freehold.cli credentials set FREEHOLD_GITHUB_TOKEN
+# (it prompts, and does not echo what you type or put it in your history)
+
+# Option 2 — an environment variable, which always wins if both are set
+```
+
+The dashboard can do the same thing: the "Add backend" form shows a token box
+for whichever backend you pick. Stored tokens live in `credentials.json` in
+your Freehold folder, readable only by your user account, and are **never**
+copied into the manifest — so they do not travel to the backends when your
+manifest is backed up.
+
+Or set it in your environment for the session:
 
 ```bash
 # Windows PowerShell (this session only)
@@ -322,6 +352,8 @@ Each run creates a **snapshot** — a point in time you can return to.
 |---|---|
 | `sync <backend>` | Copies **every** block into that backend, so it holds a complete set. |
 | `manifest push` | Stores your manifest, encrypted, in every backend. |
+| `credentials set <NAME>` | Saves a backend token without environment variables. Prompts, and never echoes or prints values. |
+| `credentials list` | Which secrets are set, and whether from the environment or the file. Never the values. |
 | `manifest pull <type> k=v …` | Rebuilds the manifest on a new machine from your key alone. |
 
 `sync` matters more than it looks. Deduplication is global: once a block is
@@ -549,6 +581,8 @@ backend implements.
 | [docs/DASHBOARD.md](docs/DASHBOARD.md) | what it shows, how it is secured, leaving a vendor |
 | [docs/MOBILE.md](docs/MOBILE.md) | the shared library, the bridge, Android vs iOS |
 | [RECOVERY.md](RECOVERY.md) | every format, for rebuilding without this software |
+| [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | sharing the apps with other people, with none of your tokens in them |
+| [android/README.md](android/README.md) | building the Android app, and what is unfinished |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | the one architectural rule, and how to add a backend |
 
 ---

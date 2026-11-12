@@ -22,6 +22,7 @@ import threading
 import time
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
+from ..core import credstore
 from ..core.driver import BackendStats, StorageDriver, register
 from ..core.errors import (BackendUnavailable, ChunkNotFound, ConfigError,
                            QuotaExceeded)
@@ -83,12 +84,12 @@ class GitHubDriver(StorageDriver):
         if token:
             return token
         env = self.config.get("token_env") or "FREEHOLD_GITHUB_TOKEN"
-        token = os.environ.get(env)
+        token = credstore.get(env)      # environment, then credentials.json
         if not token:
             raise ConfigError(
-                "no GitHub token: set " + env + ", or pass token=<pat> "
-                "(a PAT with 'repo' scope; token_env keeps it out of the "
-                "manifest)")
+                "no GitHub token. Set the " + env + " environment variable, "
+                "or save it with: freehold credentials set " + env
+                + "  (a classic PAT with 'repo' scope)")
         return token
 
     # -- pool state -------------------------------------------------------

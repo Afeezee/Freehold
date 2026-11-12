@@ -29,6 +29,13 @@ A driver gets exactly two channels for things the core cannot understand:
 `drain_warnings()` for reporting. The GitHub driver runs a whole rotating
 repo pool through those and the core is none the wiser.
 
+What a driver may import from core: `core.driver` (the interface),
+`core.errors` (the error types) and `core.credstore` (how a user's token is
+found). All three are generic. It may **not** import `core.engine`,
+`core.manifest` or `core.chunker` — that is where vendor knowledge would
+start to leak in the other direction. A test checks this by reading the
+import lines.
+
 ## Adding a storage backend
 
 1. New module in `freehold/drivers/`, subclass `StorageDriver`, implement

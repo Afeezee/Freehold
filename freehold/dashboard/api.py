@@ -107,8 +107,42 @@ class DashboardAPI:
             out.append(row)
         return out
 
+    # -- credentials ------------------------------------------------------
+    #: Secrets a backend might need, so the page can offer the right boxes
+    #: without the dashboard knowing anything vendor-specific itself.
+    SECRET_HINTS = {
+        "github": [("FREEHOLD_GITHUB_TOKEN",
+                    "GitHub token (classic, 'repo' scope)")],
+        "s3": [("FREEHOLD_S3_ACCESS_KEY_ID", "Access key ID"),
+               ("FREEHOLD_S3_SECRET_ACCESS_KEY", "Secret access key")],
+    }
+
+    def credentials(self) -> List[Dict[str, str]]:
+        """Names and where each comes from. Never the values."""
+        from ..core import credstore
+        seen = list(credstore.names(self.home))
+        for hints in self.SECRET_HINTS.values():
+            for name, _label in hints:
+                if name not in seen:
+                    seen.append(name)
+        return [{"name": n, "source": credstore.sources(n, self.home)}
+                for n in sorted(seen)]
+
+    def set_credential(self, name: str, value: str) -> Dict[str, Any]:
+        from ..core import credstore
+        if not name.strip() or not value.strip():
+            raise ConfigError("both a name and a value are needed")
+        credstore.set_value(name.strip(), value.strip(), self.home)
+        return {"name": name.strip(), "source": "credentials.json"}
+
+    def remove_credential(self, name: str) -> Dict[str, Any]:
+        from ..core import credstore
+        return {"removed": credstore.unset(name, self.home)}
+
     def drivers(self) -> List[Dict[str, str]]:
-        return [{"id": did, "options": cls.config_help}
+        return [{"id": did, "options": cls.config_help,
+                 "secrets": [{"name": n, "label": label}
+                             for n, label in self.SECRET_HINTS.get(did, [])]}
                 for did, cls in sorted(known_drivers().items())]
 
     def snapshots(self, device: Optional[str] = None,

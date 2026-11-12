@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Freehold</string>
+    <string name="not_enrolled">Not set up yet.</string>
+    <string name="enrol_help">Paste the encryption key from your computer. Find it in key.json in your Freehold folder. It is the only thing that can read your backups, so it never travels over a backend.</string>
+    <string name="key_hint">64 hex characters</string>
+    <string name="enrol">Use this key</string>
+    <string name="backend_help">Where should blocks be stored? Your GitHub username and a classic token with the \'repo\' scope. The token stays on this phone.</string>
+    <string name="owner_hint">GitHub username</string>
+    <string name="token_hint">GitHub token</string>
+    <string name="save_backend">Save backend</string>
+    <string name="folder_hint">Folder to back up</string>
+    <string name="add_folder">Watch this folder</string>
+    <string name="back_up_now">Back up now</string>
+    <string name="auto_backup">Back up automatically in the background</string>
+    <string name="footer_note">Files are split, deduplicated and encrypted on this phone before anything is uploaded. Backups run on any connection, including mobile data.</string>
+</resources>

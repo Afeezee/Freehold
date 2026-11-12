@@ -1,0 +1,101 @@
+name: release
+
+# Builds the downloadable apps and attaches them to a GitHub Release.
+#
+# Nothing here has, needs, or can reach any of your credentials. The
+# artefacts contain no tokens: whoever runs them supplies their own.
+#
+#   git tag v0.1.0 && git push origin v0.1.0
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows-exe:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pyinstaller
+      - name: Test before shipping
+        run: |
+          pip install pytest
+          python -m pytest tests -q
+      - name: Build Freehold.exe
+        run: pyinstaller packaging/Freehold.spec --noconfirm
+      - name: Check it starts
+        shell: pwsh
+        run: |
+          $env:FREEHOLD_HOME = "$env:RUNNER_TEMP\fh"
+          $out = & .\dist\Freehold.exe status 2>&1 | Out-String
+          Write-Host $out
+          if ($LASTEXITCODE -ne 0 -and $out -notmatch "no manifest") {
+            throw "the executable did not run"
+          }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Freehold-windows
+          path: dist/Freehold.exe
+
+  android-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: Build the APK
+        working-directory: android
+        run: gradle assembleDebug --no-daemon
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Freehold-android
+          path: android/app/build/outputs/apk/debug/*.apk
+
+  publish:
+    needs: [windows-exe, android-apk]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - name: List what will be published
+        run: find artifacts -type f -exec ls -l {} +
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true
+          body: |
+            ## Downloads
+
+            - **Freehold.exe** — Windows. Double-click it. No Python needed.
+            - **app-debug.apk** — Android. Sideload it; see the note below.
+
+            Neither file contains any credentials. On first run Freehold
+            generates **your** encryption key on **your** machine and tells
+            you where it is. Copy that file somewhere safe — it is the only
+            thing that can read your backups, and nobody can recover it for
+            you.
+
+            To use GitHub or an S3 store as a backend you supply your own
+            token; it is kept on your device and never leaves it except to
+            authenticate with that provider.
+
+            The Android build is signed with the standard debug key, so
+            Android will warn about an unknown developer and you will need
+            to allow installation from unknown sources. It is not on the
+            Play Store.

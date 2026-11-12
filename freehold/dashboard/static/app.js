@@ -167,11 +167,37 @@ async function loadBackends() {
     const help = () => {
       const d = data.drivers.find((x) => x.id === sel.value);
       $("driver-help").textContent = d ? d.options : "";
+      // show a box for each secret this backend needs
+      $("secret-fields").replaceChildren(...((d && d.secrets) || []).map((s) =>
+        el("label", { class: "wide" }, s.label,
+          el("input", {
+            type: "password", name: "secret:" + s.name,
+            autocomplete: "off", placeholder: "leave blank if already set",
+          }),
+          el("small", {}, "stored on this machine as " + s.name))));
     };
     sel.addEventListener("change", help);
     help();
   }
+  loadCredentials();
   loadOverview();
+}
+
+async function loadCredentials() {
+  const data = await call("/api/credentials");
+  $("cred-rows").replaceChildren(...data.credentials.map((c) => el("tr", {},
+    el("td", { class: "mono" }, c.name),
+    el("td", { class: c.source === "not set" ? "note" : "" }, c.source),
+    el("td", {}, c.source === "credentials.json"
+      ? el("button", {
+        class: "link",
+        onclick: async () => {
+          if (!confirm("Forget " + c.name + "?")) return;
+          await call("/api/credentials/remove", { name: c.name });
+          loadCredentials();
+        },
+      }, "Forget")
+      : null))));
 }
 
 $("toggle-add").addEventListener("click", () => {
@@ -193,6 +219,14 @@ $("add-backend").addEventListener("submit", async (ev) => {
   const err = $("add-error");
   err.hidden = true;
   try {
+    // save any secrets first, so validating the backend can use them
+    for (const field of form.querySelectorAll("input[name^='secret:']")) {
+      if (field.value.trim()) {
+        await call("/api/credentials", {
+          name: field.name.slice(7), value: field.value.trim(),
+        });
+      }
+    }
     await call("/api/backends", {
       name: form.name.value, driver: form.driver.value, options,
     });
