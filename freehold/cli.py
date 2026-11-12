@@ -433,8 +433,16 @@ def cmd_dashboard(args) -> int:
     h = home(args)
     m, k = _open(args)
     api = DashboardAPI(h, m, k, workers=args.workers)
-    board = Dashboard(api, host=args.host, port=args.port,
-                      token="" if args.no_token else None)
+    try:
+        board = Dashboard(api, host=args.host, port=args.port,
+                          token="" if args.no_token else None)
+    except OSError as exc:
+        m.close()
+        raise FreeholdError(
+            "port " + str(args.port) + " is already in use (" + str(exc)
+            + "). Another copy of Freehold may still be running: close it, "
+            "or start this one on a different port with --port "
+            + str(args.port + 1)) from None
     print("dashboard: " + board.url)
     if args.no_token:
         print("warning: --no-token means anything that can reach "

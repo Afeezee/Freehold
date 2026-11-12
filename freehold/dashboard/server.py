@@ -201,13 +201,22 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
 
+class _Server(ThreadingHTTPServer):
+    # ThreadingHTTPServer sets this, and on Windows it means a second
+    # process can bind a port that is already in use: both then "work" and
+    # requests go to whichever the OS picks. For a local app that is a trap -
+    # you end up talking to a stale copy without being told. Fail instead.
+    allow_reuse_address = False
+    daemon_threads = True
+
+
 class Dashboard:
     def __init__(self, api: DashboardAPI, host: str = "127.0.0.1",
                  port: int = 8731, token: Optional[str] = None):
         self.token = secrets.token_urlsafe(16) if token is None else token
         handler = type("Bound", (Handler,),
                        {"api": api, "token": self.token})
-        self.httpd = ThreadingHTTPServer((host, port), handler)
+        self.httpd = _Server((host, port), handler)
         self.httpd.daemon_threads = True
         self._thread: Optional[threading.Thread] = None
 
