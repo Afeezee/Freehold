@@ -5,6 +5,7 @@ the UI has no privileged path: the dashboard can do exactly what the CLI can.
 """
 from __future__ import annotations
 
+import os
 import threading
 import time
 import uuid
@@ -38,6 +39,41 @@ class RestoreJob:
     error: str = ""
 
 
+@dataclass
+class BackupJob:
+    id: str
+    path: str
+    state: str = "queued"          # queued | running | done | failed
+    started_at: float = 0.0
+    finished_at: float = 0.0
+    current: str = ""
+    files: int = 0
+    uploaded: int = 0
+    new_chunks: int = 0
+    errors: List[str] = field(default_factory=list)
+    warnings: List[str] = field(default_factory=list)
+    error: str = ""
+
+
+def _folder_shortcuts() -> List[Dict[str, str]]:
+    """The places an ordinary person actually keeps things."""
+    home = Path.home()
+    out = []
+    for label, p in (("Documents", home / "Documents"),
+                     ("Pictures", home / "Pictures"),
+                     ("Desktop", home / "Desktop"),
+                     ("Downloads", home / "Downloads"),
+                     ("Home folder", home)):
+        if p.is_dir():
+            out.append({"label": label, "path": str(p)})
+    if os.name == "nt":
+        for letter in "CDEFGH":
+            drive = Path(letter + ":/")
+            if drive.is_dir():
+                out.append({"label": letter + ": drive", "path": str(drive)})
+    return out
+
+
 class DashboardAPI:
     def __init__(self, home: Path, manifest: Manifest, keyring,
                  workers: int = 8):
@@ -46,7 +82,152 @@ class DashboardAPI:
         self.k = keyring
         self.workers = workers
         self._jobs: Dict[str, RestoreJob] = {}
+        self._backups: Dict[str, BackupJob] = {}
         self._lock = threading.Lock()
+
+    # -- choosing a folder to back up -------------------------------------
+    def local_folders(self, path: str = "") -> Dict[str, Any]:
+        """Browse this machine's folders, so nobody has to type a path.
+
+        A browser cannot hand back a real folder path, so the picking has to
+        happen on this side. Safe enough: the dashboard is already bound to
+        localhost behind a token, and anything it can read, the backup it is
+        about to run could read anyway.
+        """
+        if not path:
+            return {"path": "", "parent": None, "dirs": [],
+                    "shortcuts": _folder_shortcuts()}
+        here = Path(path).expanduser()
+        if not here.is_dir():
+            raise ConfigError("not a folder: " + str(here))
+        dirs = []
+        try:
+            for child in sorted(here.iterdir(), key=lambda c: c.name.lower()):
+                if child.name.startswith(".") or not child.is_dir():
+                    continue
+                dirs.append({"name": child.name, "path": str(child)})
+        except PermissionError:
+            raise ConfigError("no permission to read " + str(here)) from None
+        parent = str(here.parent) if here.parent != here else None
+        return {"path": str(here), "parent": parent, "dirs": dirs,
+                "shortcuts": _folder_shortcuts()}
+
+    # -- backing up -------------------------------------------------------
+    def start_backup(self, path: str, redundancy: int = 1) -> BackupJob:
+        if not path:
+            raise ConfigError("choose a folder first")
+        if not Path(path).expanduser().is_dir():
+            raise ConfigError("not a folder: " + path)
+        if not self.m.backends(only_enabled=True):
+            raise ConfigError("add somewhere to store the backup first")
+        job = BackupJob(id=uuid.uuid4().hex[:12],
+                        path=str(Path(path).expanduser()))
+        with self._lock:
+            self._backups[job.id] = job
+        threading.Thread(target=self._run_backup, args=(job, redundancy),
+                         daemon=True).start()
+        return job
+
+    def _run_backup(self, job: BackupJob, redundancy: int) -> None:
+        job.state = "running"
+        job.started_at = time.time()
+        eng = Engine(self.m, self.k, redundancy=redundancy,
+                     workers=self.workers)
+
+        def progress(rel, res):
+            job.current = rel
+            job.files = res.files
+            job.uploaded = res.bytes_uploaded
+
+        try:
+            res = eng.backup(Path(job.path), progress=progress)
+            job.files = res.files
+            job.uploaded = res.bytes_uploaded
+            job.new_chunks = res.chunks_new
+            job.errors = list(res.errors)
+            job.warnings = list(res.warnings)
+            # Neither of these should stop a successful backup being
+            # reported as one, but silently swallowing them hides real
+            # faults, so they are surfaced as warnings.
+            for note in (self._remember_folder(job.path),
+                         self._push_manifest()):
+                if note:
+                    job.warnings.append(note)
+            # Set last: anything waiting for "done" must be able to trust
+            # that everything this job does has actually happened.
+            job.state = "done" if not res.errors else "failed"
+        except Exception as exc:
+            job.state = "failed"
+            job.error = str(exc)
+        finally:
+            eng.close()
+            job.current = ""
+            job.finished_at = time.time()
+
+    def _remember_folder(self, path: str) -> Optional[str]:
+        """Add it to the agent's watch list, so automatic backups cover the
+        same folders the person chose here."""
+        try:
+            from ..agent.config import AgentConfig
+            cfg = AgentConfig.load(self.home)
+            if cfg.folder(path) is None:
+                cfg.add_folder(path)
+                cfg.save(self.home)
+            return None
+        except Exception as exc:
+            return "could not add this folder to the automatic list: " \
+                   + str(exc)
+
+    def _push_manifest(self) -> Optional[str]:
+        """Keep the recovery copy current without anyone having to know it
+        exists."""
+        try:
+            from ..core.portable import push_manifest
+            targets = [(b.name, build_driver(b.driver_id, b.config,
+                                             ManifestState(self.m, b.id)))
+                       for b in self.m.backends(only_enabled=True)]
+            if not targets:
+                return None
+            results = push_manifest(self.m, self.k, targets)
+            bad = [n for n, v in results.items() if v.startswith("error:")]
+            if bad:
+                return ("could not save the recovery copy to: "
+                        + ", ".join(bad))
+            return None
+        except Exception as exc:
+            return "could not save the recovery copy: " + str(exc)
+
+    def backup_jobs(self) -> List[BackupJob]:
+        return sorted(self._backups.values(), key=lambda j: -j.started_at)
+
+    def backup_job(self, job_id: str) -> Optional[BackupJob]:
+        return self._backups.get(job_id)
+
+    def watched_folders(self) -> List[Dict[str, Any]]:
+        """Folders the person has backed up before, with when it last
+        happened."""
+        from ..agent.config import AgentConfig
+        try:
+            cfg = AgentConfig.load(self.home)
+        except Exception:
+            return []
+        out = []
+        for folder in cfg.folders:
+            snap = self.m.latest_snapshot_for_root(cfg.device,
+                                                   str(folder.resolved()))
+            out.append({"path": folder.path,
+                        "last_backup": snap.started_at if snap else None,
+                        "files": snap.file_count if snap else 0,
+                        "size": snap.total_size if snap else 0})
+        return out
+
+    def forget_folder(self, path: str) -> Dict[str, bool]:
+        from ..agent.config import AgentConfig
+        cfg = AgentConfig.load(self.home)
+        removed = cfg.remove_folder(path)
+        if removed:
+            cfg.save(self.home)
+        return {"removed": removed}
 
     # -- read -------------------------------------------------------------
     def overview(self) -> Dict[str, Any]:

@@ -133,6 +133,12 @@ class Handler(BaseHTTPRequestHandler):
             return api.tree(int(q.get("snapshot", "0")), q.get("prefix", ""))
         if path == "/api/credentials":
             return {"credentials": api.credentials()}
+        if path == "/api/folders":
+            return {"folders": api.watched_folders()}
+        if path == "/api/browse-local":
+            return api.local_folders(q.get("path", ""))
+        if path == "/api/backups":
+            return {"jobs": [asdict(j) for j in api.backup_jobs()]}
         if path == "/api/jobs":
             return {"jobs": [asdict(j) for j in api.jobs()]}
         if path.startswith("/api/jobs/"):
@@ -161,6 +167,12 @@ class Handler(BaseHTTPRequestHandler):
                                            str(body.get("value", "")))
         if path == "/api/credentials/remove":
             return 200, api.remove_credential(str(body["name"]))
+        if path == "/api/backup":
+            job = api.start_backup(str(body.get("path", "")),
+                                   int(body.get("redundancy", 1)))
+            return 202, asdict(job)
+        if path == "/api/folders/forget":
+            return 200, api.forget_folder(str(body["path"]))
         if path == "/api/restore":
             job = api.start_restore(int(body["snapshot"]),
                                     str(body.get("dest", "")),

@@ -10,81 +10,63 @@
 <header>
   <h1>Freehold</h1>
   <dl id="totals">
-    <div><dt>Stored</dt><dd id="t-stored">&mdash;</dd></div>
-    <div><dt>Chunks</dt><dd id="t-chunks">&mdash;</dd></div>
-    <div><dt>Deduplicated</dt><dd id="t-dedup">&mdash;</dd></div>
-    <div><dt>Backends</dt><dd id="t-backends">&mdash;</dd></div>
+    <div><dt>Protected</dt><dd id="t-protected">&mdash;</dd></div>
+    <div><dt>Copies kept in</dt><dd id="t-places">&mdash;</dd></div>
+    <div><dt>Last backup</dt><dd id="t-last">&mdash;</dd></div>
   </dl>
 </header>
 
 <main>
-<section id="devices">
-  <h2>Devices</h2>
-  <table>
-    <thead><tr>
-      <th>Device</th><th>Platform</th><th>Last backup</th>
-      <th class="n">Files</th><th class="n">Size</th>
-    </tr></thead>
-    <tbody id="device-rows"></tbody>
-  </table>
-  <p class="empty" id="devices-empty" hidden>Nothing backed up yet.</p>
+<section id="setup" hidden>
+  <h2>Start here</h2>
+  <p class="lead">Freehold needs somewhere to keep your files before it can
+    back anything up. A second disk or a USB drive is the simplest choice.</p>
+  <button id="setup-add" class="primary">Choose where to store backups</button>
 </section>
 
-<section id="folders">
-  <h2>Folders under backup</h2>
+<section id="backup">
+  <h2>Back up a folder</h2>
+  <p class="lead">Pick a folder and Freehold copies it, scrambled so only you
+    can read it. Do it again later and only what changed is sent.</p>
+
+  <div class="row">
+    <button id="pick-folder" class="primary">Choose a folder&hellip;</button>
+    <span id="chosen" class="note">No folder chosen yet</span>
+  </div>
+
+  <div id="picker" class="picker" hidden>
+    <div id="picker-shortcuts" class="shortcuts"></div>
+    <nav id="picker-path" class="crumbs"></nav>
+    <ul id="picker-list" class="folders"></ul>
+    <div class="row">
+      <button id="picker-choose" class="primary">Back up this folder</button>
+      <button id="picker-cancel" class="link">Cancel</button>
+    </div>
+  </div>
+
+  <div id="backup-jobs"></div>
+
+  <h3>Folders you back up</h3>
   <table>
     <thead><tr>
-      <th>Folder</th><th>Device</th><th>Last backup</th>
-      <th class="n">Files</th><th class="n">Size</th>
+      <th>Folder</th><th>Last backed up</th>
+      <th class="n">Files</th><th class="n">Size</th><th></th>
     </tr></thead>
     <tbody id="folder-rows"></tbody>
   </table>
-</section>
-
-<section id="backends">
-  <div class="head">
-    <h2>Backends</h2>
-    <button id="toggle-add" class="link">Add backend</button>
-  </div>
-
-  <form id="add-backend" hidden>
-    <div class="row">
-      <label>Name <input name="name" required placeholder="r2"></label>
-      <label>Driver <select name="driver" id="driver-select"></select></label>
-    </div>
-    <label class="wide">Options
-      <input name="options" placeholder="key=value key=value">
-      <small id="driver-help"></small>
-    </label>
-    <div id="secret-fields"></div>
-    <div class="row">
-      <button type="submit">Add</button>
-      <button type="button" id="cancel-add" class="link">Cancel</button>
-    </div>
-    <p class="error" id="add-error" hidden></p>
-  </form>
-
-  <div id="backend-cards"></div>
-
-  <details id="creds">
-    <summary>Stored credentials</summary>
-    <p class="note">Tokens are read from your environment first, then from
-      <code>credentials.json</code> in your Freehold folder. Values are
-      never shown here, or sent anywhere except the backend they belong to.</p>
-    <table>
-      <thead><tr><th>Name</th><th>Where it comes from</th><th></th></tr></thead>
-      <tbody id="cred-rows"></tbody>
-    </table>
-  </details>
+  <p class="empty" id="folders-empty" hidden>Nothing backed up yet.</p>
 </section>
 
 <section id="restore">
-  <h2>Restore</h2>
+  <h2>Get files back</h2>
+  <p class="lead">Choose how far back you want to go, tick what you need, and
+    say where to put it. Nothing you already have is overwritten.</p>
+
   <div class="row">
-    <label>Device
+    <label>From which computer
       <select id="restore-device"></select>
     </label>
-    <label>Point in time
+    <label>Go back to
       <select id="restore-snapshot"></select>
     </label>
   </div>
@@ -93,31 +75,86 @@
   <table id="browser">
     <thead><tr>
       <th class="pick"><input type="checkbox" id="pick-all" title="Select all"></th>
-      <th>Name</th><th class="n">Size</th><th>Modified</th>
+      <th>Name</th><th class="n">Size</th><th>Changed</th>
     </tr></thead>
     <tbody id="browse-rows"></tbody>
   </table>
-  <p class="empty" id="browse-empty" hidden>No files in this snapshot.</p>
+  <p class="empty" id="browse-empty" hidden>Nothing in this backup.</p>
 
   <form id="restore-form">
-    <label class="wide">Restore to
+    <label class="wide">Put the files here
       <input name="dest" id="restore-dest" required
-             placeholder="C:\path\to\restore">
+             placeholder="C:\Users\you\Recovered">
     </label>
     <label class="check">
       <input type="checkbox" name="overwrite" id="restore-overwrite">
-      Overwrite files that already exist
-      <small>Off by default: an existing file is kept and the restored copy
-        is written beside it.</small>
+      Replace files that are already there
+      <small>Off by default. Your existing file is kept and the recovered
+        copy is saved next to it.</small>
     </label>
     <div class="row">
-      <button type="submit" id="restore-go">Restore selection</button>
+      <button type="submit" id="restore-go" class="primary">Get everything back</button>
       <span id="restore-note" class="note"></span>
     </div>
     <p class="error" id="restore-error" hidden></p>
   </form>
 
   <div id="jobs"></div>
+</section>
+
+<section id="backends">
+  <div class="head">
+    <h2>Where your files are kept</h2>
+    <button id="toggle-add" class="link">Add a place</button>
+  </div>
+  <p class="lead">Each place holds a complete, scrambled copy. Two places
+    means one can fail and you still have everything.</p>
+
+  <form id="add-backend" hidden>
+    <div class="row">
+      <label>Call it
+        <input name="name" required placeholder="my usb drive">
+      </label>
+      <label>Kind of place
+        <select name="driver" id="driver-select"></select>
+      </label>
+    </div>
+    <label class="wide">Settings
+      <input name="options" placeholder="path=D:/backups">
+      <small id="driver-help"></small>
+    </label>
+    <div id="secret-fields"></div>
+    <div class="row">
+      <button type="submit" class="primary">Add it</button>
+      <button type="button" id="cancel-add" class="link">Cancel</button>
+    </div>
+    <p class="error" id="add-error" hidden></p>
+  </form>
+
+  <div id="backend-cards"></div>
+
+  <details id="creds">
+    <summary>Saved passwords and tokens</summary>
+    <p class="note">Needed only for online storage like GitHub. They stay on
+      this computer and are only ever sent to the service they belong to.
+      Values are never shown here.</p>
+    <table>
+      <thead><tr><th>Name</th><th>Where it is kept</th><th></th></tr></thead>
+      <tbody id="cred-rows"></tbody>
+    </table>
+  </details>
+</section>
+
+<section id="devices">
+  <h2>Your computers</h2>
+  <table>
+    <thead><tr>
+      <th>Computer</th><th>System</th><th>Last backup</th>
+      <th class="n">Files</th><th class="n">Size</th>
+    </tr></thead>
+    <tbody id="device-rows"></tbody>
+  </table>
+  <p class="empty" id="devices-empty" hidden>No backups yet.</p>
 </section>
 </main>
 

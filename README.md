@@ -1,103 +1,79 @@
 # Freehold
 
-Personal backup that no storage vendor owns.
+Backup software that keeps your files readable only by you, and leaves you
+free to change where they are stored at any time.
 
-Your files are split, deduplicated and encrypted **on your own machine**.
-Backends only ever receive opaque encrypted blocks — they never see a
-filename, a file, or even the hash of one. Which backend holds them is a line
-of configuration, not an architectural decision, so you can add one, mirror to
-two, and drop the first without re-uploading anything.
+Files are split into blocks, scrambled on your own computer, and sent to
+whichever storage you choose — a USB drive, a second disk, a GitHub account,
+Cloudflare R2, Backblaze B2. The storage provider receives blocks it cannot
+read and cannot identify. Changing provider is a copy operation, not a
+migration.
 
-```
-your files  →  split into chunks  →  SHA-256 (dedup)  →  AES-256-GCM
-                                                              ↓
-                              GitHub  /  Cloudflare R2  /  Backblaze B2
-                              /  any S3 store  /  a USB disk  /  a NAS
-```
-
-**Status:** working, and verified end to end against the live GitHub API —
-including a simulated dead machine recovered from nothing but an encryption
-key. 143 automated tests.
+Freehold has no servers, no accounts and no subscription. Nothing is sent
+anywhere except the storage you configure yourself.
 
 ---
 
 ## Contents
 
-- [What problem this solves](#what-problem-this-solves)
-- [Do I need an .exe? Is it a website?](#do-i-need-an-exe-is-it-a-website)
-- [Install](#install)
-- [Five-minute start](#five-minute-start)
-- [Tokens and credentials — where to get them, where to put them](#tokens-and-credentials)
-- [Every command, explained](#every-command-explained)
-- [The dashboard](#the-dashboard)
-- [The background agent](#the-background-agent)
+- [How it works in one minute](#how-it-works-in-one-minute)
+- [Installing](#installing)
+- [Getting started](#getting-started)
+- [Choosing where backups are kept](#choosing-where-backups-are-kept)
+- [Tokens and passwords](#tokens-and-passwords)
+- [Backing up](#backing-up)
+- [Getting files back](#getting-files-back)
+- [Automatic backups](#automatic-backups)
+- [Recovering after a computer is lost](#recovering-after-a-computer-is-lost)
+- [Changing or leaving a storage provider](#changing-or-leaving-a-storage-provider)
+- [Command reference](#command-reference)
 - [Mobile](#mobile)
-- [Restoring](#restoring)
-- [If your computer dies](#if-your-computer-dies)
 - [How it works inside](#how-it-works-inside)
-- [What is proven, and what is not](#what-is-proven-and-what-is-not)
+- [What has been verified](#what-has-been-verified)
 - [Licence](#licence)
 
 ---
 
-## What problem this solves
+## How it works in one minute
 
-Most backup tools make one company load-bearing. If that account is
-suspended, the price changes, or the company folds, your files are hostage to
-getting them out.
+1. A folder is scanned and its contents split into blocks of about a
+   megabyte, divided at boundaries determined by the content itself.
+2. Each block is identified by a fingerprint of what it contains. Blocks that
+   have been seen before are not sent again.
+3. Each new block is encrypted on this computer, with a key that never
+   leaves it.
+4. The encrypted blocks are uploaded. The provider sees only scrambled data
+   under a meaningless name.
+5. A small database called the **manifest** records which blocks make up
+   which file. It is kept locally and also stored, encrypted, alongside the
+   blocks so that a replacement computer can recover it.
 
-Freehold treats storage as interchangeable. The part that matters — the map
-of which blocks make up which file — lives with you, in a small SQLite file
-called the **manifest**. Backends are reduced to dumb warehouses for
-encrypted blocks. Swapping one out is a copy operation, not a migration.
+Editing one document re-uploads roughly one block, not the whole file.
 
-Three consequences worth stating up front:
+Three consequences follow from this design:
 
-1. **The backend cannot read your files.** Encryption happens before anything
-   leaves the machine. This is not a promise about the provider's conduct; it
-   is a property of the design.
-2. **Losing your key means losing your data.** There is no recovery, no
-   support email, no reset. That is the cost of the previous point.
-3. **You can leave.** [RECOVERY.md](RECOVERY.md) documents every format in
-   enough detail to rebuild your files with a short script, so Freehold is
-   the convenient path and not the only one.
-
----
-
-## Do I need an .exe? Is it a website?
-
-| What you might expect | What exists today |
-|---|---|
-| A Windows `.exe` you double-click | **Yes.** A single 14 MB `Freehold.exe`, no Python needed. Double-click it and it sets itself up, starts the dashboard and opens your browser. Run it with arguments and it is the full command line instead. |
-| A website you log into | **No, and deliberately not.** There is no Freehold server, no account, no cloud. Nothing of yours touches any machine belonging to anyone else. |
-| A web page | Yes — but it runs **on your own computer**, on `127.0.0.1`, protected by a token printed at startup. Not reachable from the internet. |
-| A phone app | **Android: yes, as a buildable project** that CI turns into an APK — written but not yet run on a handset. **iOS: no**, and that needs the engine ported to another language first. See [Mobile](#mobile). |
-
-So: a **desktop app** with a local web interface, which also happens to be a
-proper command-line tool for anyone who wants one.
+- **A storage provider cannot read the files.** Encryption happens first.
+- **Losing the encryption key loses the data.** There is no reset, no support
+  address, no recovery. This is the cost of the previous point.
+- **Nothing is locked in.** [RECOVERY.md](RECOVERY.md) documents every format
+  precisely enough to rebuild files with a short script and standard tools.
 
 ---
 
-## Install
+## Installing
 
-### The easy way (Windows)
+### Windows
 
 Download `Freehold.exe` from the
-[releases page](https://github.com/Afeezee/Freehold/releases) and
-double-click it. Nothing else to install.
+[releases page](https://github.com/Afeezee/Freehold/releases) and run it.
+Nothing else is required.
 
-On first run it creates your encryption key, prints where it is, and opens
-the dashboard in your browser. **Copy that key file somewhere safe before you
-do anything else.**
+Windows may show "Windows protected your PC" because the file is not
+code-signed. Choose **More info**, then **Run anyway**.
 
-Windows will likely show "Windows protected your PC" because the file is not
-code-signed. Click *More info* → *Run anyway*. That warning appears for every
-unsigned program from a small project; signing costs a few hundred dollars a
-year.
+### Any platform, from source
 
-### From source (any platform)
-
-You need **Python 3.9 or newer**. Check with `python --version`.
+Requires Python 3.9 or later.
 
 ```bash
 git clone https://github.com/Afeezee/Freehold.git
@@ -105,517 +81,445 @@ cd Freehold
 pip install -e .
 ```
 
-That installs one dependency, `cryptography`. Nothing else.
-
-You can now use either form, whichever you prefer:
-
-```bash
-freehold status                 # if the script landed on your PATH
-python -m freehold.cli status   # always works
-```
-
-This README uses the `python -m freehold.cli` form because it works
-everywhere.
+Commands below are written as `freehold …`. If that is not on the system
+path, use `python -m freehold.cli …` instead; the two are equivalent.
 
 ### Where Freehold keeps its own files
 
-One folder, which holds your key and your manifest:
+A single folder, `~/.freehold` by default, containing the encryption key and
+the manifest. To use a different location, set `FREEHOLD_HOME`:
 
 ```bash
 # Windows PowerShell
-$env:FREEHOLD_HOME = "$HOME\.freehold"
+$env:FREEHOLD_HOME = "D:\freehold"
 
-# macOS / Linux
-export FREEHOLD_HOME=~/.freehold
-```
-
-If you do not set it, `~/.freehold` is used. Set it permanently on Windows
-with `setx FREEHOLD_HOME "%USERPROFILE%\.freehold"` (then open a new
-terminal).
-
----
-
-## Five-minute start
-
-Backing up to a second disk, with no accounts or tokens involved:
-
-```bash
-python -m freehold.cli init
-python -m freehold.cli backend add disk local path=D:/freehold-store
-python -m freehold.cli backup "C:/Users/you/Documents"
-python -m freehold.cli status
-```
-
-`init` creates two things in `FREEHOLD_HOME`:
-
-- **`key.json`** — your encryption key. **Copy this somewhere safe and
-  offline now.** A USB stick in a drawer, a password manager, printed on
-  paper. Without it your backups are permanently unreadable, by anyone,
-  including you.
-- **`manifest.db`** — the map of what is backed up where.
-
-To wrap the key with a passphrase so the file alone is not enough:
-
-```bash
-python -m freehold.cli init --passphrase "a long phrase you will not forget"
-```
-
-Every later command then needs `--passphrase`. Note the trade-off: an
-unattended background agent cannot unlock a wrapped key by itself.
-
-Restore it all somewhere new:
-
-```bash
-python -m freehold.cli restore "C:/Users/you/Restored"
+# macOS and Linux
+export FREEHOLD_HOME=/home/you/freehold
 ```
 
 ---
 
-## Tokens and credentials
+## Getting started
 
-Freehold never asks you to create an account with anyone. You bring
-credentials for storage you already control. **No token is ever written into
-the manifest unless you explicitly pass it inline** — the normal path reads
-it from an environment variable at the moment it is used.
+Running `Freehold.exe` with no arguments opens a page in the browser. Every
+task below can be done there; the equivalent commands are given for people
+who prefer a terminal.
+
+On first run Freehold creates an encryption key and reports its location.
+
+> **Copy that key file somewhere safe and offline before continuing.**
+> A USB stick kept in a drawer, a password manager, or printed on paper.
+> It is the only thing that can decrypt the backups. If it is lost, the
+> backups cannot be recovered by anyone.
+
+To protect the key with a passphrase as well:
+
+```bash
+freehold init --passphrase "a phrase that will not be forgotten"
+```
+
+Subsequent commands then require `--passphrase`. Note that a passphrase-
+protected key cannot be unlocked by the unattended background agent.
+
+---
+
+## Choosing where backups are kept
+
+At least one storage location is required. Several may be configured, in
+which case each can hold a complete copy.
+
+**In the browser:** open the page, select **Add a place**, choose a kind of
+storage and fill in the settings.
+
+**At the command line:**
+
+| Storage | Command |
+|---|---|
+| A folder, disk or USB drive | `freehold backend add usb local path=E:/backups` |
+| A network drive or NAS | `freehold backend add nas local path=//server/share/backups` |
+| GitHub | `freehold backend add gh github owner=YOURNAME` |
+| Cloudflare R2 | `freehold backend add r2 s3 endpoint=https://ACCOUNT.r2.cloudflarestorage.com bucket=freehold region=auto` |
+| Backblaze B2 | `freehold backend add b2 s3 endpoint=https://s3.us-west-004.backblazeb2.com bucket=freehold region=us-west-004` |
+
+The first word after `add` is a name of the user's choosing; it has no
+meaning to Freehold.
+
+### How GitHub storage works
+
+GitHub is not a backup service, but it can act as one. Freehold creates
+private repositories named `freehold-blobs-001`, `-002` and so on, attaches
+encrypted blocks to releases within them, and moves to a new repository when
+one reaches about 1.5 GB. This is handled automatically; the repositories do
+not need to be managed by hand.
+
+Storage limits are GitHub's, not Freehold's, and are subject to change.
+
+### Free storage allowances at the time of writing
+
+| Provider | Storage | Downloads |
+|---|---|---|
+| Cloudflare R2 | ~10 GB | free |
+| Backblaze B2 | ~10 GB | free up to 3× stored volume per month |
+| A disk already owned | whatever it holds | free |
+
+---
+
+## Tokens and passwords
+
+Only online storage requires credentials. A local disk requires none.
+
+Credentials are never written into the manifest, and therefore never travel
+to the provider they authenticate with when the manifest is backed up.
 
 ### GitHub
 
-GitHub works as a backup target because release assets are not subject to the
-repository size guidance, and a pool of private repositories can hold a
-great deal between them.
+A **classic** personal access token is required. Fine-grained tokens cannot
+create repositories, which Freehold needs to do as storage grows.
 
-**Which token:** a **classic** personal access token. Fine-grained tokens
-cannot create repositories, and Freehold creates them as the pool grows.
+1. Open <https://github.com/settings/tokens>.
+2. Select **Tokens (classic)**, then **Generate new token (classic)**.
+3. Tick the **`repo`** scope.
+4. Copy the token. GitHub displays it only once.
 
-1. Go to <https://github.com/settings/tokens> → **Tokens (classic)** →
-   **Generate new token (classic)**.
-2. Give it an expiry you are comfortable with.
-3. Tick **`repo`** (the whole block). Tick **`delete_repo`** as well only if
-   you want Freehold's test scripts to be able to clean up after themselves.
-4. Copy the token — GitHub shows it once.
+### S3-compatible storage
 
-**Where to put it.** Two options, and Freehold checks them in this order:
+Cloudflare R2: create a bucket, then an API token with *Object Read & Write*.
+The endpoint is `https://<account-id>.r2.cloudflarestorage.com` and the
+region is `auto`.
 
-```bash
-# Option 1 — save it once, in Freehold's own folder. Best if you use the
-# .exe or do not want to fiddle with environment variables.
-python -m freehold.cli credentials set FREEHOLD_GITHUB_TOKEN
-# (it prompts, and does not echo what you type or put it in your history)
+Backblaze B2: create a bucket and an application key. Use the S3-compatible
+endpoint shown in the bucket details, and the region contained in that
+hostname.
 
-# Option 2 — an environment variable, which always wins if both are set
-```
+### Where to put them
 
-The dashboard can do the same thing: the "Add backend" form shows a token box
-for whichever backend you pick. Stored tokens live in `credentials.json` in
-your Freehold folder, readable only by your user account, and are **never**
-copied into the manifest — so they do not travel to the backends when your
-manifest is backed up.
+Freehold looks in two places, in this order.
 
-Or set it in your environment for the session:
+**Saved on this computer** — the simpler option, and the only practical one
+when using `Freehold.exe`:
 
 ```bash
-# Windows PowerShell (this session only)
-$env:FREEHOLD_GITHUB_TOKEN = "ghp_your_token_here"
-
-# Windows, permanently (open a new terminal afterwards)
-setx FREEHOLD_GITHUB_TOKEN "ghp_your_token_here"
-
-# macOS / Linux
-export FREEHOLD_GITHUB_TOKEN=ghp_your_token_here
+freehold credentials set FREEHOLD_GITHUB_TOKEN
 ```
 
-Then add the backend. `owner` is your GitHub username:
+The value is prompted for, not echoed, and does not enter shell history. In
+the browser, the **Add a place** form presents a box for whichever
+credentials the chosen storage requires.
+
+**An environment variable** — takes precedence if both are present:
 
 ```bash
-python -m freehold.cli backend add gh github owner=YOURNAME
+# Windows PowerShell, permanently
+setx FREEHOLD_GITHUB_TOKEN "ghp_..."
+
+# macOS and Linux
+export FREEHOLD_GITHUB_TOKEN=ghp_...
 ```
 
-Freehold creates private repositories named `freehold-blobs-001`, `-002`, …
-as it needs them, seals each at about 1.5 GB, and moves on to the next. You
-never manage them by hand.
-
-<details>
-<summary>GitHub options you can tune</summary>
-
-| Option | Default | Meaning |
-|---|---|---|
-| `owner` | required | your username, or an organisation |
-| `org=1` | off | the owner is an organisation |
-| `prefix` | `freehold-blobs` | naming for the pool repositories |
-| `soft_cap` | `1500000000` | bytes per repo before sealing it |
-| `token_env` | `FREEHOLD_GITHUB_TOKEN` | which variable holds the token |
-| `token` | — | the token inline; **stored in the manifest**, avoid |
-| `lfs` | off | also use Git LFS for small blocks |
-| `lfs_quota` | 10 GiB | free LFS allowance to meter against |
-
-</details>
-
-### Cloudflare R2, Backblaze B2, or any S3-compatible store
-
-**R2** — create a bucket, then an API token with *Object Read & Write*. Your
-endpoint is `https://<account-id>.r2.cloudflarestorage.com` and the region is
-`auto`.
-
-**B2** — create a bucket and an application key. Use the S3-compatible
-endpoint shown in the bucket details, and the region embedded in that
-hostname (for example `us-west-004`).
-
-```bash
-# Windows PowerShell
-$env:FREEHOLD_S3_ACCESS_KEY_ID = "..."
-$env:FREEHOLD_S3_SECRET_ACCESS_KEY = "..."
-
-# macOS / Linux
-export FREEHOLD_S3_ACCESS_KEY_ID=...
-export FREEHOLD_S3_SECRET_ACCESS_KEY=...
-```
-
-```bash
-python -m freehold.cli backend add r2 s3 \
-    endpoint=https://<account-id>.r2.cloudflarestorage.com \
-    bucket=freehold region=auto
-```
-
-Both free tiers are around 10 GB. R2 charges nothing for downloads, which
-makes it a good place to restore from.
-
-### A disk, a NAS, or a mounted drive
-
-No credentials at all:
-
-```bash
-python -m freehold.cli backend add usb local path=E:/freehold
-```
-
-### Checking a token works
-
-```bash
-python -m freehold.cli backend info gh
-```
-
-This asks the backend directly and prints what it is holding — for GitHub,
-every repository in the pool and how full each one is. If the token is wrong
-or expired you get a plain error, not a silent failure.
+Saved credentials are held in `credentials.json` inside the Freehold folder,
+restricted to the current user account. `freehold credentials list` shows
+which are set and where they came from; it never prints values.
 
 ---
 
-## Every command, explained
+## Backing up
 
-Run `python -m freehold.cli <command> --help` for the exact flags.
+**In the browser:** select **Choose a folder…**, navigate to the folder, and
+select **Back up this folder**. Progress is shown as it runs.
 
-### Setting up
+**At the command line:**
 
-| Command | What it does |
+```bash
+freehold backup ~/Documents
+```
+
+Run it again at any time. Only changes are sent; unchanged files are
+recognised without being read.
+
+To write every block to two storage locations at once:
+
+```bash
+freehold backup ~/Documents --redundancy 2
+```
+
+Each run records a **snapshot** — the state of the folder at that moment,
+which can be returned to later. Snapshots are cheap: a second snapshot of an
+unchanged folder sends nothing at all.
+
+---
+
+## Getting files back
+
+**In the browser:** open **Get files back**, choose how far back to go, tick
+what is needed, give a destination, and start.
+
+**At the command line:**
+
+```bash
+freehold snapshots                                  # what is available
+freehold restore ~/Recovered                        # everything, newest
+freehold restore ~/Recovered documents/report.pdf   # selected items only
+freehold restore ~/Recovered --at "2026-01-15"      # as it was on a date
+```
+
+Three behaviours apply to every restore:
+
+- **Existing files are never overwritten.** A recovered copy is saved beside
+  the original as `report.pdf.freehold-restored-1`. Pass `--overwrite` to
+  replace files in place.
+- **Every file is verified** against the fingerprint recorded when it was
+  backed up, as it is written. A file that does not match is not saved, so a
+  silently truncated document cannot result.
+- **One unreachable storage location does not stop a restore.** Everything
+  available is recovered; anything that is not is listed by name.
+
+---
+
+## Automatic backups
+
+The agent rescans chosen folders on a schedule and backs up what changed.
+
+```bash
+freehold agent watch ~/Documents --interval 900   # every 15 minutes
+freehold agent watch                              # list watched folders
+freehold agent once                               # one pass now
+freehold agent run                                # run continuously
+```
+
+Folders backed up through the browser are added to this list automatically.
+
+To start the agent when the computer starts:
+
+```bash
+freehold agent install
+```
+
+This **prints** a service definition appropriate to the platform — a
+scheduled task on Windows, a systemd user unit on Linux, a LaunchAgent on
+macOS. It is printed rather than installed so that it can be read first.
+
+### Network use
+
+The agent backs up over any connection, including mobile data, with no size
+limit. A Wi-Fi-only default means no backups at all where mobile data is the
+usual connection, and backup software that silently does nothing is worse
+than none.
+
+To wait for an unmetered connection instead:
+
+```bash
+freehold agent run --no-cellular
+```
+
+Data use is concentrated in the **first** backup of each folder, which may be
+large. Later runs are small, because only changed blocks are sent.
+
+If a connection is lost during a backup, the agent stops cleanly. Blocks
+already uploaded are kept and the next run continues from that point. An
+incomplete snapshot is never offered for restore.
+
+---
+
+## Recovering after a computer is lost
+
+Two things are required: the **encryption key file**, and the **credentials
+for the storage**. The old computer, the manifest and any Freehold
+configuration are not needed.
+
+```bash
+# 1. On the replacement computer, install Freehold.
+# 2. Place the saved key file at $FREEHOLD_HOME/key.json
+# 3. Provide the storage credentials.
+freehold credentials set FREEHOLD_GITHUB_TOKEN
+
+# 4. Rebuild the manifest from the storage, using only the key.
+freehold manifest pull github owner=YOURNAME
+
+# 5. Recover the files.
+freehold snapshots
+freehold restore ~/Recovered
+```
+
+Step 4 works because the manifest is stored alongside the blocks, encrypted,
+at a location derived from the encryption key. A computer that has never seen
+the storage before can therefore work out where to look. For GitHub, the set
+of repositories is rediscovered through the API.
+
+This requires that the manifest has been stored at least once. The agent and
+the browser interface both do this after every successful backup. When using
+`freehold backup` manually, run `freehold manifest push` from time to time.
+
+### Recovering without Freehold
+
+[RECOVERY.md](RECOVERY.md) documents the key file format, the key derivation,
+how blocks are named and encrypted, and the manifest schema — in enough
+detail to reimplement. `tools/recover.py` is a single file that does exactly
+that using only the Python standard library and `cryptography`, importing
+nothing from Freehold.
+
+---
+
+## Changing or leaving a storage provider
+
+Deduplication is global: once a block has been stored anywhere, later backups
+do not send it again. Adding a second storage location therefore leaves it
+empty until its contents are copied across explicitly.
+
+```bash
+freehold backend add r2 s3 endpoint=... bucket=...   # add the new place
+freehold sync r2                                     # copy everything into it
+freehold verify --deep                               # confirm it can serve it
+freehold backend remove gh                           # retire the old place
+```
+
+`sync` reads each block from whichever location responds, verifies it, and
+re-encrypts it with a fresh random value for the destination. The two
+locations therefore hold different encrypted data for the same block, and an
+observer with access to both cannot match them up.
+
+Removing a storage location that holds the only copy of the data is refused.
+
+---
+
+## Command reference
+
+Every command accepts `--home`, `--key`, `--passphrase` and `--workers`.
+Run `freehold <command> --help` for full details.
+
+### Setup
+
+| Command | Purpose |
 |---|---|
-| `init` | Creates your key and manifest. Run once. `--passphrase` wraps the key. |
-| `backend drivers` | Lists backend types available (`local`, `github`, `s3`) and their options. |
-| `backend add <name> <type> k=v …` | Registers a backend. The name is yours to choose. |
-| `backend list` | What is configured, and how much each holds. |
-| `backend info <name>` | Asks the backend itself — live usage, GitHub's repo pool, and whether it is reachable at all. |
-| `backend disable <name>` / `enable` | Stop or resume writing to a backend. Existing data stays readable. |
-| `backend remove <name>` | Forgets a backend. Refused if it holds the only copy of your data. |
+| `init` | Create the encryption key and manifest. Run once. |
+| `backend drivers` | List the kinds of storage available. |
+| `backend add <name> <kind> k=v …` | Register a storage location. |
+| `backend list` | Show configured storage and how much each holds. |
+| `backend info <name>` | Query the storage directly; reports if unreachable. |
+| `backend enable` / `disable <name>` | Resume or pause writing. Existing data stays readable. |
+| `backend remove <name>` | Forget a storage location. |
+| `credentials set <NAME>` | Save a token. Prompts; never echoes or prints values. |
+| `credentials list` / `remove <NAME>` | Manage saved credentials. |
 
 ### Backing up
 
-| Command | What it does |
+| Command | Purpose |
 |---|---|
-| `backup <folder>` | Backs up a folder. Run it again later and only changes are sent. |
-| `backup <folder> --redundancy 2` | Writes every block to two backends at once. |
-| `backup <folder> --backend gh` | Use specific backends rather than the default. |
-| `--workers N` | Simultaneous transfers, default 8. `1` makes it serial. |
+| `backup <folder>` | Back up a folder. Only changes are sent. |
+| `backup <folder> --redundancy 2` | Write to two storage locations at once. |
+| `backup <folder> --backend gh` | Use specific storage rather than the default. |
+| `manifest push` | Store the manifest for disaster recovery. |
+| `sync <backend>` | Copy every block into one storage location. |
 
-Each run creates a **snapshot** — a point in time you can return to.
+### Inspecting
 
-### Looking at what you have
-
-| Command | What it does |
+| Command | Purpose |
 |---|---|
-| `status` | Totals, usage per backend, last backup per device. |
-| `snapshots` | Every snapshot, newest first, with date and file count. |
-| `ls` | Files in the newest snapshot. `--snapshot 3` or `--at 2026-01-15` for an older one. |
-| `verify` | Checks every block a snapshot needs is still reachable. |
-| `verify --deep` | Actually downloads and authenticates every block. Slower, and the real check. |
+| `status` | Totals, usage per location, last backup per computer. |
+| `snapshots` | All snapshots, newest first. |
+| `ls` | Files in a snapshot. |
+| `verify` | Check every block a snapshot needs is reachable. |
+| `verify --deep` | Download and authenticate every block. |
 
-### Restoring
+### Recovering
 
-| Command | What it does |
+| Command | Purpose |
 |---|---|
-| `restore <folder>` | Everything from the newest snapshot. |
-| `restore <folder> docs/report.pdf` | Just the paths you name. |
-| `restore <folder> --at "2026-01-15"` | As things were on that date. |
-| `restore <folder> --snapshot 7` | A specific snapshot by number. |
-| `restore <folder> --overwrite` | Replace existing files instead of writing copies beside them. |
+| `restore <folder>` | Recover everything from the newest snapshot. |
+| `restore <folder> <paths…>` | Recover named files or folders only. |
+| `restore <folder> --at <date>` | Recover the state at a past date. |
+| `restore <folder> --snapshot <n>` | Recover a specific snapshot. |
+| `restore <folder> --overwrite` | Replace existing files in place. |
+| `manifest pull <kind> k=v …` | Rebuild the manifest on a new computer. |
 
-### Staying free of any one vendor
+### Interfaces
 
-| Command | What it does |
+| Command | Purpose |
 |---|---|
-| `sync <backend>` | Copies **every** block into that backend, so it holds a complete set. |
-| `manifest push` | Stores your manifest, encrypted, in every backend. |
-| `credentials set <NAME>` | Saves a backend token without environment variables. Prompts, and never echoes or prints values. |
-| `credentials list` | Which secrets are set, and whether from the environment or the file. Never the values. |
-| `manifest pull <type> k=v …` | Rebuilds the manifest on a new machine from your key alone. |
-
-`sync` matters more than it looks. Deduplication is global: once a block is
-stored anywhere, a later backup will not send it again. So simply adding a
-second backend leaves it **empty**. `sync` is what fills it, and therefore
-what makes "I can stop using GitHub tomorrow" true rather than aspirational.
-
-Leaving a provider, in full:
-
-```bash
-python -m freehold.cli backend add r2 s3 endpoint=... bucket=...
-python -m freehold.cli sync r2            # copy everything across
-python -m freehold.cli verify --deep      # prove the new one can serve it
-python -m freehold.cli backend remove gh  # now safe to drop
-```
-
----
-
-## The dashboard
-
-```bash
-python -m freehold.cli dashboard
-# dashboard: http://127.0.0.1:8731/?token=7f2c...
-```
-
-Open the printed URL. You get devices, folders under backup, usage per
-backend (including each GitHub repository), and a restore browser where you
-can pick a point in time, tick files or folders, and restore.
-
-It is locked down on purpose, because it holds your key in memory in order to
-restore:
-
-- listens only on `127.0.0.1` — not reachable from your network
-- requires the token in the URL; without it, every request is refused
-- refuses requests from other websites open in your browser
-- cannot serve files outside its own folder
-
-`--no-token` exists for scripting and prints a warning. Do not use it on a
-shared machine.
-
----
-
-## The background agent
-
-So you do not have to remember to run `backup`.
-
-```bash
-python -m freehold.cli agent watch "C:/Users/you/Documents" --interval 900
-python -m freehold.cli agent watch "C:/Users/you/Pictures" --interval 3600
-python -m freehold.cli agent watch          # list what is watched
-python -m freehold.cli agent once           # one pass now, then exit
-python -m freehold.cli agent run            # keep running
-```
-
-It rescans each folder on its interval. Unchanged files are skipped without
-being read, so a scan is cheap even over tens of thousands of files.
-
-**Networks.** It backs up over whatever connection you have, **including
-mobile data, with no size limit**. This is a deliberate departure from the
-usual Wi-Fi-only default: where mobile data is the normal connection, a
-Wi-Fi-only agent simply never runs, and a backup tool that quietly does
-nothing is worse than none at all. If you would rather it waited for Wi-Fi,
-`python -m freehold.cli agent run --no-cellular`.
-
-Worth knowing: the expensive run is the **first** one for each folder, which
-may be gigabytes. After that, an edited document sends about 100 KB. If data
-cost matters, do the first run on Wi-Fi by hand and let the agent handle the
-rest.
-
-**Running it at startup:**
-
-```bash
-python -m freehold.cli agent install
-```
-
-This **prints** a service definition for your platform — a `schtasks` command
-on Windows, a systemd user unit on Linux, a LaunchAgent on macOS. Read it,
-then run it yourself. It deliberately does not install anything for you.
-
-If the connection drops mid-backup, the agent stops cleanly. Nothing is
-wasted: the blocks already uploaded stay, and the next run continues from
-there. A half-finished snapshot is never offered for restore.
+| `dashboard` | Open the browser interface on this computer. |
+| `agent watch` / `once` / `run` | Manage automatic backups. |
+| `agent network` | Report the current connection and whether it is permitted. |
+| `agent install` | Print a service definition for starting at boot. |
 
 ---
 
 ## Mobile
 
-There is no app in the stores. What exists is the **library an app would
-use**, finished and tested — so that a phone and a desktop share one engine
-rather than two implementations that drift apart.
+The library an Android application uses is complete and tested; the
+application itself is written but has not yet been built or run. See
+[android/README.md](android/README.md).
 
-- **Android is practical today.** The core runs under Chaquopy in an ordinary
-  Android build. Drive it from WorkManager and pass the battery and network
-  state in from the platform.
-- **iOS needs more work.** Embedding Python in an App Store build is
-  unpleasant enough that the honest path is porting the core to Rust or Go
-  first. [RECOVERY.md](RECOVERY.md) specifies every format precisely enough
-  to do that, and the chunking is deterministic, so a second implementation
-  would deduplicate against this one.
+A phone joins an existing Freehold by receiving the encryption key directly
+from the computer — never through storage, since storage is what the key
+protects.
 
-A phone joins an existing Freehold by receiving your key out of band — a QR
-code from the desktop, or a typed string. Never from a backend, since the
-backends are what the key protects. Details in [docs/MOBILE.md](docs/MOBILE.md).
-
----
-
-## Restoring
-
-Three ways to come back, all the same underneath:
-
-**Everything**, to a new machine or a new folder:
-
-```bash
-python -m freehold.cli restore "D:/Recovered"
-```
-
-**Only what you need:**
-
-```bash
-python -m freehold.cli restore "D:/Recovered" "docs/thesis.docx" "photos/2026"
-```
-
-**As it was on a date**, for when the damage was a bad edit rather than a
-dead disk:
-
-```bash
-python -m freehold.cli snapshots
-python -m freehold.cli restore "D:/Recovered" --at "2026-01-15 09:00"
-```
-
-Three behaviours that are not accidents:
-
-- **Existing files are never silently overwritten.** The restored copy lands
-  beside the original as `report.pdf.freehold-restored-1`. Use `--overwrite`
-  when you actually mean it.
-- **Every file is checked** against the hash recorded at backup time, as it
-  is written. A file that does not match is not placed at all, so you never
-  get a silently truncated document.
-- **One dead backend does not stop a restore.** Everything reachable comes
-  back; whatever cannot is listed by name, with the block and the backends
-  that were tried.
-
----
-
-## If your computer dies
-
-This is the case the whole project is shaped around, and it is tested against
-live infrastructure, not simulated.
-
-You need two things: your **key file**, and your **backend credentials**.
-Not the old machine, not the manifest, not a backup of Freehold itself.
-
-```bash
-# 1. on the new machine
-pip install -e .
-$env:FREEHOLD_HOME = "$HOME\.freehold"
-$env:FREEHOLD_GITHUB_TOKEN = "ghp_..."
-
-# 2. put the key file you kept safe into $FREEHOLD_HOME\key.json
-
-# 3. rebuild the manifest from the backend, using only that key
-python -m freehold.cli manifest pull github owner=YOURNAME
-
-# 4. restore
-python -m freehold.cli snapshots
-python -m freehold.cli restore "D:/Recovered"
-```
-
-Step 3 works because the manifest is stored in your backends too, encrypted,
-at an address derived from your key — so a new machine can work out where to
-look without being told. The GitHub backend even rediscovers its repository
-pool from the API, since the new machine has never heard of those repos.
-
-**This only works if the manifest was pushed.** The agent does it after every
-successful run. If you only ever use `backup` by hand, run
-`python -m freehold.cli manifest push` occasionally — it takes seconds.
-
-### Without Freehold at all
-
-If this project disappears, [RECOVERY.md](RECOVERY.md) specifies every
-format — the key file, the key derivation, how blocks are named and
-encrypted, the database schema — in enough detail to rebuild your files from
-scratch. `tools/recover.py` is a single file that does exactly that, using
-only Python's standard library and `cryptography`, importing nothing from
-Freehold. It is tested by running it in isolated mode, so it cannot
-accidentally pass by borrowing code it should not have.
+iOS is not supported. Embedding Python in an iOS application is impractical
+enough that the realistic approach is porting the core engine to a language
+that cross-compiles. The formats are documented precisely enough in
+[RECOVERY.md](RECOVERY.md) for a second implementation to interoperate.
 
 ---
 
 ## How it works inside
 
-**Chunking.** Files are split on content, not at fixed offsets, using a
-rolling hash (FastCDC). Insert a paragraph at the top of a document and the
-boundaries resynchronise almost immediately, so only the blocks that really
-changed are new. Average block is 1 MiB.
+**Content-defined chunking.** Files are divided at boundaries determined by a
+rolling hash of the content, not at fixed offsets. Inserting text at the
+start of a document shifts only the first boundary; the rest resynchronise,
+so unchanged blocks remain unchanged.
 
-**Deduplication.** Each block is identified by the SHA-256 of its contents.
-Identical blocks — the same photo in two folders, an unchanged file across
-snapshots — are stored once.
+**Deduplication.** Each block is addressed by the SHA-256 of its contents.
+Identical blocks are stored once, whether they come from two folders, two
+snapshots or two computers sharing a manifest.
 
 **Encryption.** Each block is sealed with AES-256-GCM under a key derived
-from yours, with a fresh random nonce. The backend's name for a block is
-`HMAC-SHA256(your key, block hash)`, not the hash itself — so a provider
-cannot test whether you store a particular known file by hashing a copy of
-it.
+from the user's key, with a fresh random nonce. The name a block is stored
+under is `HMAC-SHA256(key, block hash)` rather than the hash itself, so a
+provider cannot determine whether a known file is present by hashing a copy.
 
-**The manifest.** A SQLite database mapping file → ordered blocks → which
-backend holds each one and where. The source of truth; backends are
-warehouses underneath it.
+**The manifest.** A SQLite database mapping file → ordered blocks → storage
+location. It is the authoritative record; storage locations are interchangeable
+beneath it.
 
-**Concurrency.** Transfers run eight at a time by default. Measured against
-live GitHub, this was 2.1× faster for uploads and 10.8× for downloads; the
-difference is an asymmetric home connection, not the code.
+**Concurrency.** Transfers run eight at a time by default (`--workers`).
 
-More in [docs/DESIGN.md](docs/DESIGN.md), which also records the two things
-deliberately frozen: the database schema, and the four-method interface every
-backend implements.
-
-| Document | Covers |
+| Document | Contents |
 |---|---|
-| [docs/DESIGN.md](docs/DESIGN.md) | schema, driver interface, concurrency model |
-| [docs/GITHUB.md](docs/GITHUB.md) | repo pool, release assets, LFS, measured speeds |
-| [docs/S3.md](docs/S3.md) | R2 / B2 setup, request signing, what is verified |
-| [docs/AGENT.md](docs/AGENT.md) | scheduling, network behaviour, running as a service |
-| [docs/DASHBOARD.md](docs/DASHBOARD.md) | what it shows, how it is secured, leaving a vendor |
-| [docs/MOBILE.md](docs/MOBILE.md) | the shared library, the bridge, Android vs iOS |
-| [RECOVERY.md](RECOVERY.md) | every format, for rebuilding without this software |
-| [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | sharing the apps with other people, with none of your tokens in them |
-| [android/README.md](android/README.md) | building the Android app, and what is unfinished |
-| [CONTRIBUTING.md](CONTRIBUTING.md) | the one architectural rule, and how to add a backend |
+| [docs/DESIGN.md](docs/DESIGN.md) | Database schema, storage interface, concurrency model |
+| [docs/GITHUB.md](docs/GITHUB.md) | Repository pool, release assets, LFS, measured throughput |
+| [docs/S3.md](docs/S3.md) | R2 and B2 configuration, request signing, verification status |
+| [docs/AGENT.md](docs/AGENT.md) | Scheduling, network behaviour, running as a service |
+| [docs/DASHBOARD.md](docs/DASHBOARD.md) | Browser interface and how it is secured |
+| [docs/MOBILE.md](docs/MOBILE.md) | Shared library, platform bridge, Android and iOS |
+| [docs/DISTRIBUTION.md](docs/DISTRIBUTION.md) | Distributing the applications to other people |
+| [RECOVERY.md](RECOVERY.md) | File formats, for recovery without this software |
+| [CONTRIBUTING.md](CONTRIBUTING.md) | Architectural constraints and adding storage support |
 
 ---
 
-## What is proven, and what is not
+## What has been verified
 
-Being precise about this is more useful than a feature list.
+**Against the live GitHub API** (`tools/live_e2e_test.py`, 23 of 23 checks):
+backup across a rotating pool of private repositories with the size limit
+respected, blocks distributed across repositories, a single-byte edit
+re-uploading one block of twenty, the browser interface reporting usage and
+completing a point-in-time restore, the manifest stored in both locations,
+and every block read back and authenticated. The test then deletes the local
+installation entirely, makes one storage location unreachable, recovers the
+manifest from GitHub alone, and restores the folder byte-for-byte identical.
 
-**Verified against the live GitHub API** (`tools/live_e2e_test.py`, 23 of 23
-checks): backup across a rotating pool of real private repositories, the
-size cap respected, blocks spread across repos, a one-byte edit re-uploading
-one block of twenty, the dashboard reporting usage and completing a
-point-in-time restore, the manifest stored in both backends, and a deep
-verify reading every block back. Then the machine deleted outright, one
-backend made unreachable, the manifest recovered **from GitHub alone**, and
-the whole tree restored byte-identical.
-
-**Verified locally, 143 automated tests:** degraded restores, corrupted
-blocks detected, interrupted backups resuming, concurrency limits, the
-standalone recovery tool, and that the core contains no vendor-specific code.
+**Automated tests:** 159 covering degraded restores, corrupted block
+detection, interrupted backups resuming, concurrency limits, the standalone
+recovery tool, credential handling, and the architectural constraint that the
+core contains no provider-specific code.
 
 **Not verified:**
 
-- **The S3 driver against a real R2 or B2 endpoint.** Request signing matches
-  AWS's own published test vector and the whole path runs over real HTTP to a
-  local server, but provider quirks are untested. If you try it, please open
-  an issue either way.
-- **iOS.** See [Mobile](#mobile).
-- **Very large datasets.** The largest live test was a few megabytes. The
-  design holds, but nobody has run a terabyte through it.
-- **Chunking speed.** Pure Python, roughly 12 MB/s. Fine for incremental
-  backups, slow for a first run over a large library. Replaceable without
-  touching anything else.
+- The S3 driver against a live R2 or B2 endpoint. Request signing matches the
+  published AWS test vector and the full path is exercised over real HTTP
+  against a local server, but provider-specific behaviour is untested.
+- The Android application, which has never been built.
+- Datasets larger than a few megabytes in live testing.
+- Chunking throughput, which is approximately 12 MB/s in pure Python —
+  adequate for incremental backups, slow for a large first backup.
 
 ---
 
@@ -623,24 +527,14 @@ standalone recovery tool, and that the core contains no vendor-specific code.
 
 **PolyForm Noncommercial 1.0.0** — see [LICENSE](LICENSE).
 
-In plain terms: **free for any non-commercial use.** Personal backups, study,
-research, hobby projects, charities, schools, universities, public bodies.
-You may read it, change it, and share it, provided the licence travels with
-it.
+Free for any non-commercial purpose: personal use, study, research, hobby
+projects, charities, schools, universities and public bodies. The software
+may be read, modified and redistributed provided the licence accompanies it.
 
-**Commercial use is not granted.** That includes selling it, offering it as a
-paid service, or using it internally at a for-profit company. Want that? Ask
-the copyright holder.
+Commercial use is not granted. For commercial terms, contact the copyright
+holder.
 
-One honest note, since the two words are often used interchangeably: a
-licence that bars commercial use is **source-available**, not *open source*
-in the formal sense — the Open Source Definition does not allow restrictions
-on who may use software or for what. GitHub will label this repository
-"non-OSI" or show no licence badge for that reason. Nothing is wrong; it
-simply is not the same thing, and the distinction matters to some people who
-may want to use this.
-
-If you would rather have the formal open-source label, Apache-2.0 or AGPL-3.0
-would give it — AGPL being the one that still discourages a company from
-taking it closed. Changing your mind later is easy while the project has one
-author and hard once it has contributors.
+A licence that restricts commercial use is **source-available** rather than
+*open source* in the formal sense, because the Open Source Definition does
+not permit restrictions on who may use software or for what purpose. GitHub
+will not display a standard licence badge for this reason.
