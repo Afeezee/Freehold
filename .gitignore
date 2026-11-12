@@ -1,0 +1,39 @@
+# Never commit these. The key file is the only thing that can read your
+# backups, and the manifest is a map of everything you own.
+key.json
+*.key
+manifest.db
+manifest.db-wal
+manifest.db-shm
+agent.json
+agent.lock
+agent.log
+.freehold/
+
+# Logs from the live test scripts (contain account and repo names)
+*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.eggs/
+.venv/
+venv/
+env/
+
+# Tooling
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
+htmlcov/
+
+# Editors / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db

@@ -1,0 +1,119 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Freehold</title>
+<link rel="stylesheet" href="app.css">
+</head>
+<body>
+<header>
+  <h1>Freehold</h1>
+  <dl id="totals">
+    <div><dt>Stored</dt><dd id="t-stored">&mdash;</dd></div>
+    <div><dt>Chunks</dt><dd id="t-chunks">&mdash;</dd></div>
+    <div><dt>Deduplicated</dt><dd id="t-dedup">&mdash;</dd></div>
+    <div><dt>Backends</dt><dd id="t-backends">&mdash;</dd></div>
+  </dl>
+</header>
+
+<main>
+<section id="devices">
+  <h2>Devices</h2>
+  <table>
+    <thead><tr>
+      <th>Device</th><th>Platform</th><th>Last backup</th>
+      <th class="n">Files</th><th class="n">Size</th>
+    </tr></thead>
+    <tbody id="device-rows"></tbody>
+  </table>
+  <p class="empty" id="devices-empty" hidden>Nothing backed up yet.</p>
+</section>
+
+<section id="folders">
+  <h2>Folders under backup</h2>
+  <table>
+    <thead><tr>
+      <th>Folder</th><th>Device</th><th>Last backup</th>
+      <th class="n">Files</th><th class="n">Size</th>
+    </tr></thead>
+    <tbody id="folder-rows"></tbody>
+  </table>
+</section>
+
+<section id="backends">
+  <div class="head">
+    <h2>Backends</h2>
+    <button id="toggle-add" class="link">Add backend</button>
+  </div>
+
+  <form id="add-backend" hidden>
+    <div class="row">
+      <label>Name <input name="name" required placeholder="r2"></label>
+      <label>Driver <select name="driver" id="driver-select"></select></label>
+    </div>
+    <label class="wide">Options
+      <input name="options" placeholder="key=value key=value">
+      <small id="driver-help"></small>
+    </label>
+    <div class="row">
+      <button type="submit">Add</button>
+      <button type="button" id="cancel-add" class="link">Cancel</button>
+    </div>
+    <p class="error" id="add-error" hidden></p>
+  </form>
+
+  <div id="backend-cards"></div>
+</section>
+
+<section id="restore">
+  <h2>Restore</h2>
+  <div class="row">
+    <label>Device
+      <select id="restore-device"></select>
+    </label>
+    <label>Point in time
+      <select id="restore-snapshot"></select>
+    </label>
+  </div>
+
+  <nav id="crumbs" class="crumbs"></nav>
+  <table id="browser">
+    <thead><tr>
+      <th class="pick"><input type="checkbox" id="pick-all" title="Select all"></th>
+      <th>Name</th><th class="n">Size</th><th>Modified</th>
+    </tr></thead>
+    <tbody id="browse-rows"></tbody>
+  </table>
+  <p class="empty" id="browse-empty" hidden>No files in this snapshot.</p>
+
+  <form id="restore-form">
+    <label class="wide">Restore to
+      <input name="dest" id="restore-dest" required
+             placeholder="C:\path\to\restore">
+    </label>
+    <label class="check">
+      <input type="checkbox" name="overwrite" id="restore-overwrite">
+      Overwrite files that already exist
+      <small>Off by default: an existing file is kept and the restored copy
+        is written beside it.</small>
+    </label>
+    <div class="row">
+      <button type="submit" id="restore-go">Restore selection</button>
+      <span id="restore-note" class="note"></span>
+    </div>
+    <p class="error" id="restore-error" hidden></p>
+  </form>
+
+  <div id="jobs"></div>
+</section>
+</main>
+
+<footer>
+  <span id="updated"></span>
+  <button id="refresh" class="link">Refresh</button>
+</footer>
+
+<script src="app.js"></script>
+</body>
+</html>
