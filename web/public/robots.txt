@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://freehold.vercel.app/sitemap.xml

@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+  <style>
+    .dark { display: none }
+    @media (prefers-color-scheme: dark) {
+      .light { display: none }
+      .dark { display: inline }
+    }
+  </style>
+  <g class="light">
+  <rect x="0" y="0" width="6" height="6" rx="1.4" fill="#17191D"/>
+  <rect x="9" y="0" width="6" height="6" rx="1.4" fill="#17191D"/>
+  <rect x="18" y="0" width="6" height="6" rx="1.4" fill="#17191D"/>
+  <rect x="0" y="9" width="6" height="6" rx="1.4" fill="#17191D"/>
+  <rect x="0" y="18" width="6" height="6" rx="1.4" fill="#17191D"/>
+  <rect x="9" y="18" width="6" height="6" rx="1.4" fill="#17191D"/>
+  <rect x="18" y="18" width="6" height="6" rx="1.4" fill="#17191D"/>
+  <rect x="9" y="9" width="6" height="6" rx="1.4" fill="#C25E3A"/>
+  </g>
+  <g class="dark">
+  <rect x="0" y="0" width="6" height="6" rx="1.4" fill="#E8E6E3"/>
+  <rect x="9" y="0" width="6" height="6" rx="1.4" fill="#E8E6E3"/>
+  <rect x="18" y="0" width="6" height="6" rx="1.4" fill="#E8E6E3"/>
+  <rect x="0" y="9" width="6" height="6" rx="1.4" fill="#E8E6E3"/>
+  <rect x="0" y="18" width="6" height="6" rx="1.4" fill="#E8E6E3"/>
+  <rect x="9" y="18" width="6" height="6" rx="1.4" fill="#E8E6E3"/>
+  <rect x="18" y="18" width="6" height="6" rx="1.4" fill="#E8E6E3"/>
+  <rect x="9" y="9" width="6" height="6" rx="1.4" fill="#E08A5F"/>
+  </g>
+</svg>
