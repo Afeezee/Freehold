@@ -17,15 +17,27 @@ param(
 $ErrorActionPreference = "Stop"
 if (-not $env:FREEHOLD_HOME) { $env:FREEHOLD_HOME = "$HOME\.freehold" }
 
-if (-not $env:FREEHOLD_GITHUB_TOKEN) {
-    Write-Error "Set FREEHOLD_GITHUB_TOKEN first (classic PAT, 'repo' scope)."
+# Freehold already stores tokens for people who do not use a shell, so
+# look there too rather than demanding an environment variable.
+$token = $env:FREEHOLD_GITHUB_TOKEN
+if (-not $token) {
+    $credFile = Join-Path $env:FREEHOLD_HOME "credentials.json"
+    if (Test-Path $credFile) {
+        $saved = (Get-Content -Raw $credFile | ConvertFrom-Json)
+        $token = $saved.FREEHOLD_GITHUB_TOKEN
+        if ($token) { Write-Host "using the token saved in credentials.json" }
+    }
+}
+if (-not $token) {
+    Write-Error ("No GitHub token. Either set FREEHOLD_GITHUB_TOKEN, or " +
+        "save one with: python -m freehold.cli credentials set FREEHOLD_GITHUB_TOKEN")
     exit 1
 }
 
 # Who does the token actually belong to? Typing the username by hand is
 # what broke the last attempt, so do not ask for it.
 $headers = @{
-    Authorization          = "Bearer $env:FREEHOLD_GITHUB_TOKEN"
+    Authorization          = "Bearer $token"
     Accept                 = "application/vnd.github+json"
     "X-GitHub-Api-Version" = "2022-11-28"
     "User-Agent"           = "freehold-setup"

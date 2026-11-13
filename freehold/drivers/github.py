@@ -454,7 +454,10 @@ class GitHubDriver(StorageDriver):
                 "About %s uploads, so this will take a while." % f"{calls:,}",
                 "That is within GitHub's hourly allowance, but not by much."))
 
-        if survey.files and survey.bytes / max(survey.files, 1) < 8192:
+        # Only worth saying when there are enough files for it to matter.
+        # Warning that a single 39-byte file is "mostly very small files"
+        # is noise, and noise is how real warnings get ignored.
+        if survey.files >= 200 and survey.bytes / survey.files < 8192:
             issues.append(Limit(
                 "warn",
                 "This folder is mostly very small files (%s of them)."

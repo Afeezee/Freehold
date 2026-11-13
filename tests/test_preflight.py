@@ -113,6 +113,15 @@ def test_github_warns_about_a_pile_of_tiny_files():
     assert any("very small files" in i.message for i in issues)
 
 
+def test_no_small_file_warning_for_a_handful_of_files():
+    """A single tiny file is not "mostly very small files". Warnings that
+    fire on everything are how real ones get ignored."""
+    for count in (1, 10, 100):
+        issues = github().preflight(
+            Survey(root="x", files=count, bytes=count * 40))
+        assert not any("very small files" in i.message for i in issues), count
+
+
 # -- what the other backends say -----------------------------------------
 def test_local_storage_refuses_what_will_not_fit(tmp_path):
     driver = build_driver("local", {"path": str(tmp_path)})
