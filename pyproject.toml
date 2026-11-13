@@ -8,9 +8,19 @@ authors = [{ name = "Afeez Olagunju" }]
 keywords = ["backup", "encryption", "deduplication", "chunking", "restore",
             "github", "s3", "r2", "b2", "zero-knowledge"]
 dependencies = ["cryptography>=42"]
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Environment :: Console",
+  "Intended Audience :: End Users/Desktop",
+  "License :: OSI Approved :: GNU Affero General Public License v3 or later (AGPLv3+)",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Topic :: System :: Archiving :: Backup",
+  "Topic :: Security :: Cryptography",
+]
 
-[project.license]
-text = "PolyForm-Noncommercial-1.0.0"
+license = "AGPL-3.0-or-later"
+license-files = ["LICENSE"]
 
 [project.urls]
 Homepage = "https://github.com/Afeezee/Freehold"

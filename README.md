@@ -525,16 +525,24 @@ core contains no provider-specific code.
 
 ## Licence
 
-**PolyForm Noncommercial 1.0.0** — see [LICENSE](LICENSE).
+**GNU Affero General Public License v3.0 or later** — see [LICENSE](LICENSE).
 
-Free for any non-commercial purpose: personal use, study, research, hobby
-projects, charities, schools, universities and public bodies. The software
-may be read, modified and redistributed provided the licence accompanies it.
+Open source in the formal sense: OSI-approved, with no restriction on who
+may use it or for what. Anyone may run, study, modify and redistribute it,
+commercial users included.
 
-Commercial use is not granted. For commercial terms, contact the copyright
-holder.
+What the AGPL asks in return is reciprocity. Distribute a modified version,
+or run one where other people use it over a network, and the source of that
+version must be available under the same terms. Using Freehold privately,
+however extensively, carries no such obligation.
 
-A licence that restricts commercial use is **source-available** rather than
-*open source* in the formal sense, because the Open Source Definition does
-not permit restrictions on who may use software or for what purpose. GitHub
-will not display a standard licence badge for this reason.
+That is a deliberate choice rather than an attempt to block commercial use.
+Permissive terms would let a company take this, build a paid service on it,
+and contribute nothing back. The AGPL does not forbid that; it requires that
+the improvements come back with it.
+
+**If the copyleft obligation does not suit you**, a separate commercial
+licence is available without it — see [COPYRIGHT](COPYRIGHT).
+
+Contributions require a sign-off; see [CLA.md](CLA.md) for why, and what it
+does and does not ask of you.

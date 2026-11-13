@@ -136,5 +136,4 @@ if ($isPrivate) {
 } else {
     Write-Host "It is PUBLIC."
 }
-Write-Host "GitHub will show no standard licence badge: PolyForm Noncommercial"
-Write-Host "is not an OSI licence, which is expected, not a mistake."
+Write-Host "Licence: AGPL-3.0. GitHub should show it on the repository page."

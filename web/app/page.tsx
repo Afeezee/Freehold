@@ -292,8 +292,8 @@ freehold restore ~/Recovered`}</code></pre>
               <Mark size={20} /> Freehold
             </a>
             <p style={{ margin: 0, maxWidth: "34ch" }}>
-              Free for personal, educational and charitable use under the
-              PolyForm Noncommercial licence.
+              Open source under the AGPL-3.0. Free to use, study, modify
+              and share; improvements to public versions come back.
             </p>
           </div>
           <div>

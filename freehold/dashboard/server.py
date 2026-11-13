@@ -133,6 +133,12 @@ class Handler(BaseHTTPRequestHandler):
             return api.tree(int(q.get("snapshot", "0")), q.get("prefix", ""))
         if path == "/api/credentials":
             return {"credentials": api.credentials()}
+        if path == "/api/about":
+            # AGPL section 13: anyone interacting with this over a network
+            # is entitled to the source of the version they are using.
+            from .. import __license__, __source__, __version__
+            return {"name": "Freehold", "version": __version__,
+                    "license": __license__, "source": __source__}
         if path == "/api/health":
             return api.health()
         if path == "/api/settings":

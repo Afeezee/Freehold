@@ -523,3 +523,9 @@ td.name { font-family: var(--mono); font-size: 13px;
 .pf-issue.warn strong { color: var(--warn); }
 .pf-issue.block strong { color: var(--bad); }
 .pf-issue p { margin: 0 0 var(--s1); color: var(--ink-soft); }
+
+.foot-legal { display: flex; gap: var(--s2); align-items: center;
+              flex-wrap: wrap; }
+.foot-legal a { color: var(--muted); text-decoration: underline;
+                text-underline-offset: 2px; }
+.foot-legal a:hover { color: var(--ink); }

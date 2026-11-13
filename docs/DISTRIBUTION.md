@@ -86,32 +86,35 @@ Store needs that plus a developer account ($25, once).
   are self-contained.
 - **winget / Chocolatey / Scoop** — Windows package managers. Scoop is the
   least ceremony; winget wants a signed installer.
-- **F-Droid** — a good fit for a non-commercial Android app, but it requires
-  a reproducible build and an OSI-approved licence. PolyForm Noncommercial
-  does not qualify, so this would mean relicensing.
+- **F-Droid** — now a realistic target for the Android build: it needs a
+  reproducible build and an OSI-approved licence, and the AGPL qualifies.
 - **PyPI** — `pip install freehold` for people who already have Python.
-  Note that PyPI expects a licence it recognises; a non-commercial licence is
-  allowed but will show as "other".
+  PyPI recognises the AGPL, so it appears properly in the package metadata.
 
-## The licence is the real constraint on sharing
+## What the licence allows
 
-Freehold is under **PolyForm Noncommercial 1.0.0**. Anyone may use it for
-personal, educational, charitable or research purposes, and may share it on.
-Commercial use is not granted.
+Freehold is under the **AGPL-3.0-or-later**, which is OSI-approved open
+source. Anyone may use, modify and redistribute it, for any purpose
+including commercial ones. Distributing a modified version, or running one
+as a network service, requires publishing that version's source under the
+same terms.
 
-That restriction means it is **source-available, not open source** in the
-formal sense, which has practical consequences worth knowing before you
-publish:
+Practical consequences for distribution:
 
-- GitHub will not show a standard licence badge.
-- F-Droid and most Linux distributions will not package it.
-- Some companies filter out non-OSI dependencies automatically.
-- Contributors who only work on open-source projects may pass.
+- GitHub shows a standard licence badge.
+- **F-Droid will accept it**, which a non-commercial licence would have
+  ruled out. That is the natural home for the Android build.
+- Most Linux distributions will package AGPL software.
+- Some companies ban AGPL dependencies internally. That is the clause
+  working as intended rather than a problem to route around.
+- Anyone wanting to build a product on this without the copyleft
+  obligation can buy a commercial licence instead; see `COPYRIGHT`.
 
-None of that stops an individual downloading and using it, which is the main
-case. If you later want the formal label, Apache-2.0 or AGPL-3.0 would give
-it — AGPL still discourages a company taking your work closed. Changing is
-easy now and hard once other people have contributed code.
+One obligation that applies to you as much as to anyone else: if you deploy
+a **modified** Freehold where people use it over a network, you must offer
+them its source. The dashboard links to the source of the running version
+in its footer, which covers an unmodified build; point that link at your
+fork if you change the code.
 
 ## A note on supporting people
 

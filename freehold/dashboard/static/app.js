@@ -882,8 +882,19 @@ $("refresh").addEventListener("click", () => {
   if (state.tab === "restore") loadSnapshots();
 });
 
+async function loadAbout() {
+  // The source link must point at the version actually running, which is
+  // what the AGPL's network clause is about.
+  const a = await guard(() => api("/api/about"));
+  if (!a) return;
+  $("foot-version").textContent = a.version;
+  $("foot-licence").textContent = a.license;
+  $("foot-source").href = a.source;
+}
+
 (async function start() {
   try {
+    await loadAbout();
     await loadHealth();
     route();
     await Promise.all([loadFolders(), loadBackends(), loadActivity(),
