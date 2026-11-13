@@ -133,6 +133,10 @@ class Handler(BaseHTTPRequestHandler):
             return api.tree(int(q.get("snapshot", "0")), q.get("prefix", ""))
         if path == "/api/credentials":
             return {"credentials": api.credentials()}
+        if path == "/api/health":
+            return api.health()
+        if path == "/api/settings":
+            return api.settings()
         if path == "/api/folders":
             return {"folders": api.watched_folders()}
         if path == "/api/browse-local":
@@ -167,6 +171,9 @@ class Handler(BaseHTTPRequestHandler):
                                            str(body.get("value", "")))
         if path == "/api/credentials/remove":
             return 200, api.remove_credential(str(body["name"]))
+        if path == "/api/settings":
+            return 200, api.set_setting(str(body["key"]),
+                                        str(body.get("value", "")))
         if path == "/api/backup":
             job = api.start_backup(str(body.get("path", "")),
                                    int(body.get("redundancy", 1)))

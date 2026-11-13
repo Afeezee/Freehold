@@ -211,8 +211,10 @@ def test_a_file_whose_chunk_fails_is_dropped_from_the_snapshot(tmp_path):
     res = eng.backup(src, device="pc")
 
     assert res.files == 1, "the unstorable file should not be counted"
-    assert any("doomed.txt" in e and "NOT backed up" in e
+    assert any("doomed.txt" in e and "not backed up" in e
                for e in res.errors), res.errors
+    assert res.dropped_files == 1
+    assert any("failed because" in e for e in res.errors)
     listed = [f.path for f in m.files(res.snapshot_id)]
     assert listed == ["fine.bin"]
 

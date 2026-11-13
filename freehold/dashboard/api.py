@@ -50,6 +50,7 @@ class BackupJob:
     files: int = 0
     uploaded: int = 0
     new_chunks: int = 0
+    dropped: int = 0
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     error: str = ""
@@ -84,6 +85,72 @@ class DashboardAPI:
         self._jobs: Dict[str, RestoreJob] = {}
         self._backups: Dict[str, BackupJob] = {}
         self._lock = threading.Lock()
+
+    # -- the key, and small interface preferences -------------------------
+    #: Only these may be written through the interface. The manifest's meta
+    #: table also holds things the engine depends on.
+    UI_SETTINGS = ("ui.key_saved", "ui.onboarded")
+
+    def key_info(self) -> Dict[str, Any]:
+        """Where the key is and whether it is protected. Never its contents.
+
+        Losing this file is the one unrecoverable failure, so the interface
+        has to be able to point at it and ask whether a copy exists.
+        """
+        keyfile = self.home / "key.json"
+        wrapped = False
+        if keyfile.exists():
+            try:
+                wrapped = '"wrapped": true' in keyfile.read_text()
+            except OSError:
+                pass
+        return {"path": str(keyfile), "exists": keyfile.exists(),
+                "passphrase_protected": wrapped,
+                "saved_elsewhere": self.m.get_meta("ui.key_saved") == "yes"}
+
+    def settings(self) -> Dict[str, str]:
+        return {k: (self.m.get_meta(k) or "") for k in self.UI_SETTINGS}
+
+    def set_setting(self, key: str, value: str) -> Dict[str, str]:
+        if key not in self.UI_SETTINGS:
+            raise ConfigError("not a setting the interface may change: "
+                              + key)
+        self.m.set_meta(key, value)
+        self.m.commit()
+        return {key: value}
+
+    def health(self) -> Dict[str, Any]:
+        """One answer to the question people actually have: am I safe?"""
+        backends = self.m.backends(only_enabled=True)
+        devices = self.devices()
+        last = max((d["last_backup"] or 0) for d in devices) if devices else 0
+        totals = self.m.totals()
+        # A run that stored nothing is recorded as failed. If the most recent
+        # attempt failed, say so loudly: an old successful backup does not
+        # make today's failure acceptable.
+        recent_failures = [s for s in self.m.snapshots(complete_only=False)
+                           if s.status == "failed"][:1]
+        failing = bool(recent_failures) and (
+            not last or recent_failures[0].started_at >= last)
+
+        if failing:
+            state = "bad"
+            headline = "The last backup did not work"
+        elif not backends:
+            state, headline = "setup", "Choose where to keep your backups"
+        elif not last:
+            state, headline = "setup", "Nothing is backed up yet"
+        elif time.time() - last > 7 * 24 * 3600:
+            state, headline = "stale", "Your last backup is over a week old"
+        else:
+            state, headline = "ok", "Your files are backed up"
+        return {"state": state, "headline": headline, "last_backup": last,
+                "protected_bytes": totals["plaintext_bytes"],
+                "places": len(backends),
+                "mirrored": len(backends) > 1,
+                "failing": failing,
+                "failed_folder": (recent_failures[0].root if failing else ""),
+                "key": self.key_info()}
 
     # -- choosing a folder to back up -------------------------------------
     def local_folders(self, path: str = "") -> Dict[str, Any]:
@@ -144,6 +211,7 @@ class DashboardAPI:
             job.files = res.files
             job.uploaded = res.bytes_uploaded
             job.new_chunks = res.chunks_new
+            job.dropped = res.dropped_files
             job.errors = list(res.errors)
             job.warnings = list(res.warnings)
             # Neither of these should stop a successful backup being
@@ -155,7 +223,10 @@ class DashboardAPI:
                     job.warnings.append(note)
             # Set last: anything waiting for "done" must be able to trust
             # that everything this job does has actually happened.
-            job.state = "done" if not res.errors else "failed"
+            # A run that dropped files protected less than the person asked
+            # for, so it is not a success even if some of it worked.
+            job.state = "done" if not (res.errors or res.dropped_files) \
+                else "failed"
         except Exception as exc:
             job.state = "failed"
             job.error = str(exc)
@@ -371,7 +442,16 @@ class DashboardAPI:
             raise ConfigError("a backend needs a name")
         if self.m.backend_by_name(name):
             raise ConfigError("a backend called " + name + " already exists")
-        build_driver(driver_id, dict(options))   # validate before storing
+        driver = build_driver(driver_id, dict(options))
+        # Prove it actually works before accepting it. Storing a backend
+        # that cannot be reached means every later backup fails one chunk at
+        # a time, which is a slow and confusing way to find out.
+        try:
+            driver.health()
+        except Exception as exc:
+            raise ConfigError(
+                "that storage could not be reached, so it has not been "
+                "added: " + str(exc)) from None
         bid = self.m.add_backend(name, driver_id, dict(options))
         return {"id": bid, "name": name, "driver": driver_id}
 

@@ -4,165 +4,276 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Freehold</title>
+<meta name="color-scheme" content="light dark">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="stylesheet" href="app.css">
 </head>
 <body>
-<header>
-  <h1>Freehold</h1>
-  <dl id="totals">
-    <div><dt>Protected</dt><dd id="t-protected">&mdash;</dd></div>
-    <div><dt>Copies kept in</dt><dd id="t-places">&mdash;</dd></div>
-    <div><dt>Last backup</dt><dd id="t-last">&mdash;</dd></div>
-  </dl>
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="chrome">
+  <div class="wrap chrome-inner">
+    <a class="brand" href="#overview" aria-label="Freehold">
+      <svg class="mark" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+        <rect x="0" y="0" width="6" height="6" rx="1.4"/>
+        <rect x="9" y="0" width="6" height="6" rx="1.4"/>
+        <rect x="18" y="0" width="6" height="6" rx="1.4"/>
+        <rect x="0" y="9" width="6" height="6" rx="1.4"/>
+        <rect class="key" x="9" y="9" width="6" height="6" rx="1.4"/>
+        <rect x="0" y="18" width="6" height="6" rx="1.4"/>
+        <rect x="9" y="18" width="6" height="6" rx="1.4"/>
+        <rect x="18" y="18" width="6" height="6" rx="1.4"/>
+      </svg>
+      <span class="brand-name">Freehold</span>
+    </a>
+
+    <nav class="tabs" aria-label="Sections">
+      <a href="#overview" data-tab="overview">Overview</a>
+      <a href="#backup" data-tab="backup">Back up</a>
+      <a href="#restore" data-tab="restore">Recover</a>
+      <a href="#storage" data-tab="storage">Storage</a>
+    </nav>
+  </div>
 </header>
 
-<main>
-<section id="setup" hidden>
-  <h2>Start here</h2>
-  <p class="lead">Freehold needs somewhere to keep your files before it can
-    back anything up. A second disk or a USB drive is the simplest choice.</p>
-  <button id="setup-add" class="primary">Choose where to store backups</button>
-</section>
+<div id="banner-slot" class="wrap" aria-live="polite"></div>
 
-<section id="backup">
-  <h2>Back up a folder</h2>
-  <p class="lead">Pick a folder and Freehold copies it, scrambled so only you
-    can read it. Do it again later and only what changed is sent.</p>
+<main id="main" class="wrap">
 
-  <div class="row">
-    <button id="pick-folder" class="primary">Choose a folder&hellip;</button>
-    <span id="chosen" class="note">No folder chosen yet</span>
-  </div>
+  <!-- ─────────────── first run ─────────────── -->
+  <section id="view-onboarding" class="view" hidden>
+    <div class="onboard">
+      <p class="eyebrow">Setting up</p>
+      <h1>Three things, then you are protected.</h1>
 
-  <div id="picker" class="picker" hidden>
-    <div id="picker-shortcuts" class="shortcuts"></div>
-    <nav id="picker-path" class="crumbs"></nav>
-    <ul id="picker-list" class="folders"></ul>
-    <div class="row">
-      <button id="picker-choose" class="primary">Back up this folder</button>
-      <button id="picker-cancel" class="link">Cancel</button>
+      <ol class="steps" id="onboard-steps">
+        <li class="step" data-step="key">
+          <div class="step-num" aria-hidden="true">1</div>
+          <div class="step-body">
+            <h2>Save your encryption key</h2>
+            <p>This file is the only thing that can read your backups. If it
+              is lost, nobody can recover them — not us, not anyone. Copy it
+              somewhere separate from this computer: a USB stick, a password
+              manager, or print it.</p>
+            <p class="keypath"><code id="onboard-keypath">…</code>
+              <button class="btn ghost sm" id="copy-keypath" type="button">Copy path</button>
+            </p>
+            <label class="check">
+              <input type="checkbox" id="key-saved-check">
+              I have saved a copy somewhere safe
+            </label>
+          </div>
+        </li>
+
+        <li class="step" data-step="place">
+          <div class="step-num" aria-hidden="true">2</div>
+          <div class="step-body">
+            <h2>Choose where backups are kept</h2>
+            <p>A second disk or USB drive is the simplest. Online storage
+              works too — your files are scrambled before they leave this
+              computer, so the provider cannot read them.</p>
+            <button class="btn primary" id="onboard-add-place" type="button">
+              Choose storage
+            </button>
+          </div>
+        </li>
+
+        <li class="step" data-step="folder">
+          <div class="step-num" aria-hidden="true">3</div>
+          <div class="step-body">
+            <h2>Pick a folder to protect</h2>
+            <p>Start with the one that would hurt most to lose. You can add
+              more later.</p>
+            <button class="btn primary" id="onboard-pick-folder" type="button">
+              Choose a folder
+            </button>
+          </div>
+        </li>
+      </ol>
     </div>
-  </div>
+  </section>
 
-  <div id="backup-jobs"></div>
-
-  <h3>Folders you back up</h3>
-  <table>
-    <thead><tr>
-      <th>Folder</th><th>Last backed up</th>
-      <th class="n">Files</th><th class="n">Size</th><th></th>
-    </tr></thead>
-    <tbody id="folder-rows"></tbody>
-  </table>
-  <p class="empty" id="folders-empty" hidden>Nothing backed up yet.</p>
-</section>
-
-<section id="restore">
-  <h2>Get files back</h2>
-  <p class="lead">Choose how far back you want to go, tick what you need, and
-    say where to put it. Nothing you already have is overwritten.</p>
-
-  <div class="row">
-    <label>From which computer
-      <select id="restore-device"></select>
-    </label>
-    <label>Go back to
-      <select id="restore-snapshot"></select>
-    </label>
-  </div>
-
-  <nav id="crumbs" class="crumbs"></nav>
-  <table id="browser">
-    <thead><tr>
-      <th class="pick"><input type="checkbox" id="pick-all" title="Select all"></th>
-      <th>Name</th><th class="n">Size</th><th>Changed</th>
-    </tr></thead>
-    <tbody id="browse-rows"></tbody>
-  </table>
-  <p class="empty" id="browse-empty" hidden>Nothing in this backup.</p>
-
-  <form id="restore-form">
-    <label class="wide">Put the files here
-      <input name="dest" id="restore-dest" required
-             placeholder="C:\Users\you\Recovered">
-    </label>
-    <label class="check">
-      <input type="checkbox" name="overwrite" id="restore-overwrite">
-      Replace files that are already there
-      <small>Off by default. Your existing file is kept and the recovered
-        copy is saved next to it.</small>
-    </label>
-    <div class="row">
-      <button type="submit" id="restore-go" class="primary">Get everything back</button>
-      <span id="restore-note" class="note"></span>
+  <!-- ─────────────── overview ─────────────── -->
+  <section id="view-overview" class="view" hidden>
+    <div class="status" id="status-card">
+      <div class="status-icon" id="status-icon" aria-hidden="true"></div>
+      <div class="status-body">
+        <h1 id="status-headline">Checking…</h1>
+        <p id="status-detail" class="muted"></p>
+      </div>
+      <div class="status-actions">
+        <button class="btn primary" data-go="backup" type="button">Back up now</button>
+        <button class="btn" data-go="restore" type="button">Recover files</button>
+      </div>
     </div>
-    <p class="error" id="restore-error" hidden></p>
-  </form>
 
-  <div id="jobs"></div>
-</section>
+    <dl class="facts" id="facts"></dl>
 
-<section id="backends">
-  <div class="head">
-    <h2>Where your files are kept</h2>
-    <button id="toggle-add" class="link">Add a place</button>
-  </div>
-  <p class="lead">Each place holds a complete, scrambled copy. Two places
-    means one can fail and you still have everything.</p>
+    <section class="panel">
+      <div class="panel-head">
+        <h2>Folders you protect</h2>
+        <button class="btn ghost sm" data-go="backup" type="button">Add a folder</button>
+      </div>
+      <div id="overview-folders"></div>
+    </section>
 
-  <form id="add-backend" hidden>
-    <div class="row">
-      <label>Call it
-        <input name="name" required placeholder="my usb drive">
-      </label>
-      <label>Kind of place
-        <select name="driver" id="driver-select"></select>
-      </label>
+    <section class="panel">
+      <div class="panel-head"><h2>Recent activity</h2></div>
+      <div id="activity"></div>
+    </section>
+  </section>
+
+  <!-- ─────────────── back up ─────────────── -->
+  <section id="view-backup" class="view" hidden>
+    <h1>Back up a folder</h1>
+    <p class="lede">Freehold copies the folder, scrambled so only you can
+      read it. Run it again later and only what changed is sent.</p>
+
+    <div class="panel pad">
+      <div class="picker-head">
+        <button class="btn primary" id="open-picker" type="button">
+          Choose a folder…
+        </button>
+        <span class="muted" id="picker-hint">Nothing chosen yet</span>
+      </div>
+
+      <div id="picker" class="picker" hidden role="group"
+           aria-label="Choose a folder">
+        <div class="shortcuts" id="picker-shortcuts"></div>
+        <nav class="path" id="picker-path" aria-label="Current folder"></nav>
+        <ul class="folders" id="picker-list"></ul>
+        <div class="picker-foot">
+          <button class="btn primary" id="picker-choose" type="button" disabled>
+            Back up this folder
+          </button>
+          <button class="btn ghost" id="picker-cancel" type="button">Cancel</button>
+        </div>
+      </div>
     </div>
-    <label class="wide">Settings
-      <input name="options" placeholder="path=D:/backups">
-      <small id="driver-help"></small>
-    </label>
-    <div id="secret-fields"></div>
-    <div class="row">
-      <button type="submit" class="primary">Add it</button>
-      <button type="button" id="cancel-add" class="link">Cancel</button>
+
+    <div id="backup-jobs" aria-live="polite"></div>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Folders you protect</h2></div>
+      <div id="folder-list"></div>
+    </section>
+  </section>
+
+  <!-- ─────────────── recover ─────────────── -->
+  <section id="view-restore" class="view" hidden>
+    <h1>Recover files</h1>
+    <p class="lede">Choose a point in time, tick what you need, and say where
+      to put it. Files you already have are never overwritten.</p>
+
+    <div class="panel pad">
+      <div class="field-row">
+        <label class="field">
+          <span>From which computer</span>
+          <select id="restore-device"></select>
+        </label>
+        <label class="field">
+          <span>Go back to</span>
+          <select id="restore-snapshot"></select>
+        </label>
+      </div>
+
+      <nav class="path" id="crumbs" aria-label="Folder path"></nav>
+
+      <div class="table-scroll">
+        <table id="browser">
+          <caption class="sr">Files in this backup</caption>
+          <thead><tr>
+            <th class="pick"><input type="checkbox" id="pick-all"
+                aria-label="Select everything shown"></th>
+            <th scope="col">Name</th>
+            <th scope="col" class="n">Size</th>
+            <th scope="col">Changed</th>
+          </tr></thead>
+          <tbody id="browse-rows"></tbody>
+        </table>
+      </div>
+      <p class="empty" id="browse-empty" hidden>Nothing in this backup.</p>
+
+      <form id="restore-form">
+        <label class="field">
+          <span>Put the recovered files here</span>
+          <input name="dest" id="restore-dest" required
+                 placeholder="C:\Users\you\Recovered"
+                 aria-describedby="dest-help">
+          <small id="dest-help">A new empty folder is the safest choice.</small>
+        </label>
+        <label class="check">
+          <input type="checkbox" id="restore-overwrite">
+          Replace files that are already there
+          <small>Leave this off and your existing file is kept, with the
+            recovered copy saved beside it.</small>
+        </label>
+        <div class="picker-foot">
+          <button class="btn primary" id="restore-go" type="submit">
+            Recover everything
+          </button>
+          <span class="muted" id="restore-note"></span>
+        </div>
+        <p class="alert error" id="restore-error" hidden role="alert"></p>
+      </form>
     </div>
-    <p class="error" id="add-error" hidden></p>
-  </form>
 
-  <div id="backend-cards"></div>
+    <div id="jobs" aria-live="polite"></div>
+  </section>
 
-  <details id="creds">
-    <summary>Saved passwords and tokens</summary>
-    <p class="note">Needed only for online storage like GitHub. They stay on
-      this computer and are only ever sent to the service they belong to.
-      Values are never shown here.</p>
-    <table>
-      <thead><tr><th>Name</th><th>Where it is kept</th><th></th></tr></thead>
-      <tbody id="cred-rows"></tbody>
-    </table>
-  </details>
-</section>
+  <!-- ─────────────── storage ─────────────── -->
+  <section id="view-storage" class="view" hidden>
+    <h1>Storage</h1>
+    <p class="lede">Each place holds a complete, scrambled copy. Two places
+      means one can fail and you still have everything.</p>
 
-<section id="devices">
-  <h2>Your computers</h2>
-  <table>
-    <thead><tr>
-      <th>Computer</th><th>System</th><th>Last backup</th>
-      <th class="n">Files</th><th class="n">Size</th>
-    </tr></thead>
-    <tbody id="device-rows"></tbody>
-  </table>
-  <p class="empty" id="devices-empty" hidden>No backups yet.</p>
-</section>
+    <div class="panel-head">
+      <h2 class="sr">Places</h2>
+      <button class="btn primary" id="toggle-add" type="button">Add a place</button>
+    </div>
+
+    <form id="add-backend" class="panel pad" hidden>
+      <div class="field-row">
+        <label class="field">
+          <span>What should it be called?</span>
+          <input name="name" required placeholder="My USB drive">
+        </label>
+        <label class="field">
+          <span>Kind of storage</span>
+          <select name="driver" id="driver-select"></select>
+        </label>
+      </div>
+      <div id="driver-fields"></div>
+      <p class="alert error" id="add-error" hidden role="alert"></p>
+      <div class="picker-foot">
+        <button class="btn primary" type="submit">Add it</button>
+        <button class="btn ghost" id="cancel-add" type="button">Cancel</button>
+      </div>
+    </form>
+
+    <div id="backend-cards" class="cards"></div>
+
+    <section class="panel">
+      <div class="panel-head"><h2>Your computers</h2></div>
+      <div id="device-list"></div>
+    </section>
+
+    <details class="panel pad advanced">
+      <summary>Saved tokens and keys</summary>
+      <p class="muted sm">Needed only for online storage. They stay on this
+        computer, are never written into your backup, and are only ever sent
+        to the service they belong to. Values are never shown here.</p>
+      <div id="cred-list"></div>
+    </details>
+  </section>
 </main>
 
-<footer>
-  <span id="updated"></span>
-  <button id="refresh" class="link">Refresh</button>
+<footer class="wrap foot">
+  <span id="updated" class="muted sm"></span>
+  <button class="btn ghost sm" id="refresh" type="button">Refresh</button>
 </footer>
 
+<div id="toasts" class="toasts" aria-live="assertive"></div>
 <script src="app.js"></script>
 </body>
 </html>

@@ -24,7 +24,8 @@ from collections import deque
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path, PurePosixPath
-from typing import (Dict, Iterable, List, Optional, Sequence, Set, Tuple)
+from typing import (Any, Dict, Iterable, List, Optional, Sequence, Set,
+                    Tuple)
 
 from . import chunker
 from .crypto import KeyRing, sha256
@@ -48,6 +49,12 @@ class BackupResult:
     chunks_new: int = 0
     bytes_uploaded: int = 0
     unchanged_files: int = 0
+    #: Files that were walked but could not be stored, because none of their
+    #: chunks reached a backend. They are removed from the snapshot, so this
+    #: is the count of what is NOT protected.
+    dropped_files: int = 0
+    #: True when the snapshot was abandoned: nothing at all was stored.
+    failed: bool = False
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     seconds: float = 0.0
@@ -199,8 +206,17 @@ class Engine:
                 self._reap(inflight, res, failed, block=True)
             if failed:
                 self._discard_unbacked(sid, failed, res)
-            self.m.finish_snapshot(sid, "complete", res.files, res.total_size,
+            # A snapshot that stored nothing is not a backup, and must never
+            # be offered as one. Reporting "complete, 0 files" after every
+            # upload failed is the worst outcome this program can produce:
+            # it looks exactly like a folder that happened to be empty.
+            res.failed = res.files == 0 and (bool(failed) or bool(res.errors))
+            self.m.finish_snapshot(sid, "failed" if res.failed else "complete",
+                                   res.files, res.total_size,
                                    res.bytes_uploaded)
+            if res.failed:
+                res.errors.insert(0, "nothing was backed up: no storage "
+                                     "accepted any of this folder's data")
         except BaseException:
             self.m.finish_snapshot(sid, "failed", res.files, res.total_size,
                                    res.bytes_uploaded)
@@ -316,13 +332,22 @@ class Engine:
 
     def _discard_unbacked(self, sid: int, failed: Dict[bytes, str],
                           res: BackupResult) -> None:
+        reasons: Dict[str, int] = {}
         for h, why in failed.items():
             for path, size in self.m.drop_files_with_chunk(sid, h):
                 res.files -= 1
+                res.dropped_files += 1
                 res.total_size -= size
-                res.errors.append(
-                    path + ": NOT backed up, chunk " + h.hex()[:12]
-                    + " could not be stored (" + why + ")")
+                reasons[why] = reasons.get(why, 0) + 1
+                # Naming every file is useless when thousands fail and the
+                # cause is the same for all of them.
+                if res.dropped_files <= 10:
+                    res.errors.append(path + ": not backed up (" + why + ")")
+        if res.dropped_files > 10:
+            res.errors.append("... and " + str(res.dropped_files - 10)
+                              + " more files could not be stored")
+        for why, count in sorted(reasons.items(), key=lambda kv: -kv[1])[:3]:
+            res.errors.append(str(count) + " file(s) failed because: " + why)
 
     # -- restore ----------------------------------------------------------
     def resolve_snapshot(self, snapshot_id: Optional[int] = None,
@@ -535,6 +560,46 @@ class Engine:
             res.restored.append(f.path)
         except OSError as exc:
             res.failed.append(RestoreFailure(f.path, "symlink: " + str(exc)))
+
+    # -- integrity ---------------------------------------------------------
+    def doctor(self, repair: bool = False) -> Dict[str, Any]:
+        """Find backups that are not what they claim to be.
+
+        Two things can leave a manifest lying about itself: a run that
+        stored nothing but was recorded before this check existed, and
+        chunks recorded locally that never reached any backend. Both make a
+        folder look protected when it is not, which is the only failure mode
+        of a backup tool that really matters.
+        """
+        report: Dict[str, Any] = {
+            "unstored_chunks": self.m.unstored_chunks(),
+            "unrestorable": [
+                {"snapshot": sid, "device": dev, "root": root,
+                 "missing_chunks": n}
+                for sid, dev, root, n in self.m.unrestorable_snapshots()],
+            "empty": [{"snapshot": sid, "device": dev, "root": root}
+                      for sid, dev, root in self.m.empty_complete_snapshots()],
+            "unreachable": [],
+            "repaired": 0,
+            "purged": 0,
+        }
+        for b in self.m.backends():
+            try:
+                self.driver(b).health()
+            except Exception as exc:
+                report["unreachable"].append({"name": b.name,
+                                              "reason": str(exc)})
+        if repair:
+            seen = set()
+            for row in report["unrestorable"] + report["empty"]:
+                sid = row["snapshot"]
+                if sid in seen:
+                    continue
+                seen.add(sid)
+                self.m.mark_snapshot_failed(sid)
+            report["repaired"] = len(seen)
+            report["purged"] = self.m.purge_unstored_chunks()
+        return report
 
     # -- replication ------------------------------------------------------
     def replicate(self, target: str, progress=None) -> Dict[str, int]:

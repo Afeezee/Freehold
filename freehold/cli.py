@@ -89,7 +89,13 @@ def cmd_backend(args) -> int:
             key, val = kv.split("=", 1)
             cfg[key] = val
         from .core.driver import build_driver
-        build_driver(args.driver, cfg)  # fail now, not at first backup
+        driver = build_driver(args.driver, cfg)  # fail now, not mid-backup
+        try:
+            driver.health()
+        except Exception as exc:
+            raise FreeholdError(
+                "that storage could not be reached, so it has not been "
+                "added: " + str(exc)) from None
         m.add_backend(args.name, args.driver, cfg)
         print("added backend " + args.name + " (" + args.driver + ")")
     elif args.backend_cmd == "remove":
@@ -205,6 +211,45 @@ def cmd_restore(args) -> int:
             line += " [backends tried: " + ", ".join(f.backends) + "]"
         print(line, file=sys.stderr)
     return 0 if res.ok else 2
+
+
+def cmd_doctor(args) -> int:
+    """Check that what the manifest claims is actually true."""
+    m, k = _open(args)
+    eng = Engine(m, k, workers=args.workers)
+    r = eng.doctor(repair=args.fix)
+    eng.close()
+    m.close()
+
+    problems = 0
+    for b in r["unreachable"]:
+        problems += 1
+        print("UNREACHABLE  %s: %s" % (b["name"], b["reason"]))
+    if r["unstored_chunks"]:
+        problems += 1
+        print("NOT STORED   %d blocks exist only in this manifest; no "
+              "backend holds them" % r["unstored_chunks"])
+    for s in r["unrestorable"]:
+        problems += 1
+        print("CANNOT RESTORE  snapshot %d of %s (%d blocks missing)"
+              % (s["snapshot"], s["root"], s["missing_chunks"]))
+    for s in r["empty"]:
+        problems += 1
+        print("EMPTY        snapshot %d of %s contains no files"
+              % (s["snapshot"], s["root"]))
+
+    if not problems:
+        print("ok: every backup can be restored from storage that answers")
+        return 0
+    if args.fix:
+        print("\nrepaired: %d snapshot(s) marked failed, %d orphaned block "
+              "record(s) removed" % (r["repaired"], r["purged"]))
+        print("Those folders are no longer protected. Back them up again "
+              "once your storage works.")
+        return 0
+    print("\nRun 'freehold doctor --fix' to mark these as failed so they "
+          "stop being offered as backups.")
+    return 2
 
 
 def cmd_credentials(args) -> int:
@@ -556,6 +601,12 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--overwrite", action="store_true",
                    help="replace existing files instead of restoring beside")
     s.set_defaults(fn=cmd_restore)
+
+    s = sub.add_parser("doctor", help="check that your backups are really "
+                                      "there, and repair wrong records")
+    s.add_argument("--fix", action="store_true",
+                   help="mark unrestorable snapshots as failed")
+    s.set_defaults(fn=cmd_doctor)
 
     s = sub.add_parser("credentials", help="store backend tokens without "
                                             "environment variables")

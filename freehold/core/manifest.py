@@ -435,6 +435,51 @@ class Manifest:
         self.db.commit()
         return out
 
+    def unstored_chunks(self) -> int:
+        """Chunks the manifest knows about that no backend actually holds.
+        Any number above zero means data was recorded but never stored."""
+        return self.db.execute(
+            "SELECT COUNT(*) n FROM chunk WHERE hash NOT IN "
+            "(SELECT chunk_hash FROM chunk_location)").fetchone()["n"]
+
+    def purge_unstored_chunks(self) -> int:
+        """Forget chunks that were never stored and nothing references.
+        Deduplication keys off chunk_location, so these rows do nothing but
+        make a failure look permanent."""
+        cur = self.db.execute(
+            "DELETE FROM chunk WHERE refcount <= 0 AND hash NOT IN "
+            "(SELECT chunk_hash FROM chunk_location)")
+        self.db.commit()
+        return cur.rowcount or 0
+
+    def unrestorable_snapshots(self) -> List[Tuple[int, str, str, int]]:
+        """Snapshots marked complete that reference data no backend holds.
+        These are the dangerous ones: they look like backups and are not."""
+        rows = self.db.execute(
+            "SELECT s.id, d.name AS device, s.root, COUNT(DISTINCT fc.chunk_hash) n "
+            "FROM snapshot s "
+            "JOIN device d ON d.id = s.device_id "
+            "JOIN file f ON f.snapshot_id = s.id "
+            "JOIN file_chunk fc ON fc.file_id = f.id "
+            "WHERE s.status = 'complete' AND fc.chunk_hash NOT IN "
+            "(SELECT chunk_hash FROM chunk_location) "
+            "GROUP BY s.id ORDER BY s.id").fetchall()
+        return [(r["id"], r["device"], r["root"], r["n"]) for r in rows]
+
+    def mark_snapshot_failed(self, snapshot_id: int) -> None:
+        self.db.execute("UPDATE snapshot SET status='failed' WHERE id=?",
+                        (snapshot_id,))
+        self.db.commit()
+
+    def empty_complete_snapshots(self) -> List[Tuple[int, str, str]]:
+        """Complete snapshots holding no files at all."""
+        rows = self.db.execute(
+            "SELECT s.id, d.name AS device, s.root FROM snapshot s "
+            "JOIN device d ON d.id = s.device_id "
+            "WHERE s.status='complete' AND s.file_count = 0 "
+            "ORDER BY s.id").fetchall()
+        return [(r["id"], r["device"], r["root"]) for r in rows]
+
     def prior_file(self, device: str, root: str,
                    path: str) -> Optional[sqlite3.Row]:
         """Most recent complete record of this path, for the unchanged-file

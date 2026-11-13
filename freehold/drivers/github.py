@@ -60,9 +60,18 @@ class GitHubDriver(StorageDriver):
 
     def __init__(self, config: Dict[str, Any], state=None, api=None):
         super().__init__(config, state)
-        self.owner = config.get("owner")
+        self.owner = (config.get("owner") or "").strip()
         if not self.owner:
             raise ConfigError("github driver needs owner=<user-or-org>")
+        # Catch the placeholder being typed in literally, and anything else
+        # that cannot be a GitHub account. Without this the name is only
+        # rejected by the API, one failed upload at a time.
+        if not re.fullmatch(r"[A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?",
+                            self.owner):
+            raise ConfigError(
+                "'" + self.owner + "' is not a GitHub username. Use the name "
+                "exactly as it appears in your profile URL, with no brackets "
+                "or spaces.")
         self.is_org = _as_bool(config.get("org"))
         self.prefix = config.get("prefix") or "freehold-blobs"
         self.tag = config.get("tag") or DEFAULT_TAG

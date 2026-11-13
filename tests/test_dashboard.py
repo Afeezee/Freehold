@@ -272,11 +272,18 @@ def fetch(board, path, body=None, token=None, headers=None):
     req.add_header("Content-Type", "application/json")
     for key, value in (headers or {}).items():
         req.add_header(key, value)
-    try:
-        with urllib.request.urlopen(req, timeout=10) as r:
-            return r.status, json.loads(r.read() or b"{}")
-    except urllib.error.HTTPError as exc:
-        return exc.code, json.loads(exc.read() or b"{}")
+    # A freshly bound loopback server can refuse the first connection on a
+    # busy machine; retry briefly rather than letting it flake.
+    for attempt in range(4):
+        try:
+            with urllib.request.urlopen(req, timeout=10) as r:
+                return r.status, json.loads(r.read() or b"{}")
+        except urllib.error.HTTPError as exc:
+            return exc.code, json.loads(exc.read() or b"{}")
+        except (urllib.error.URLError, ConnectionError):
+            if attempt == 3:
+                raise
+            time.sleep(0.25)
 
 
 def test_serves_the_page_and_the_api(served):
