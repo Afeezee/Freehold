@@ -143,10 +143,24 @@
         <nav class="path" id="picker-path" aria-label="Current folder"></nav>
         <ul class="folders" id="picker-list"></ul>
         <div class="picker-foot">
-          <button class="btn primary" id="picker-choose" type="button" disabled>
-            Back up this folder
+          <button class="btn" id="picker-check" type="button" disabled>
+            Check this folder
           </button>
           <button class="btn ghost" id="picker-cancel" type="button">Cancel</button>
+        </div>
+      </div>
+
+      <div id="preflight" class="preflight" hidden aria-live="polite">
+        <h3 id="pf-title">Checking…</h3>
+        <dl class="pf-facts" id="pf-facts"></dl>
+        <div id="pf-issues"></div>
+        <div class="picker-foot">
+          <button class="btn primary" id="pf-go" type="button" disabled>
+            Back up this folder
+          </button>
+          <button class="btn ghost" id="pf-back" type="button">
+            Choose a different folder
+          </button>
         </div>
       </div>
     </div>

@@ -493,3 +493,33 @@ td.name { font-family: var(--mono); font-size: 13px;
   .onboard h1 { font-size: 22px; }
   .toasts { left: var(--s4); right: var(--s4); max-width: none; }
 }
+
+/* ── pre-backup check ──────────────────────────────────────────────── */
+.preflight {
+  margin-top: var(--s4); padding: var(--s5);
+  border: 1px solid var(--line); border-left: 3px solid var(--ok);
+  border-radius: var(--r2); background: var(--raised);
+}
+.preflight.blocked { border-left-color: var(--bad); }
+.preflight h3 { margin: 0 0 var(--s4); font-size: 17px; font-weight: 620;
+                text-transform: none; letter-spacing: normal;
+                color: var(--ink); }
+.pf-facts {
+  display: grid; gap: var(--s4); margin: 0 0 var(--s4);
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+.pf-facts dt { font-size: 11px; letter-spacing: 0.06em;
+               text-transform: uppercase; color: var(--muted); }
+.pf-facts dd { margin: 2px 0 0; font-size: 17px; font-weight: 600; }
+.pf-facts dd .unit { font-size: 13px; font-weight: 400; color: var(--muted); }
+.pf-issue {
+  border-radius: var(--r2); padding: var(--s3) var(--s4);
+  margin-bottom: var(--s3); font-size: 14px;
+}
+.pf-issue.warn { background: var(--warn-soft); }
+.pf-issue.block { background: var(--bad-soft); }
+.pf-issue strong { display: block; font-size: 12px; letter-spacing: 0.04em;
+                   text-transform: uppercase; margin-bottom: var(--s1); }
+.pf-issue.warn strong { color: var(--warn); }
+.pf-issue.block strong { color: var(--bad); }
+.pf-issue p { margin: 0 0 var(--s1); color: var(--ink-soft); }

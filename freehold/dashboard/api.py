@@ -179,14 +179,66 @@ class DashboardAPI:
         return {"path": str(here), "parent": parent, "dirs": dirs,
                 "shortcuts": _folder_shortcuts()}
 
+    # -- measuring before committing --------------------------------------
+    def preflight(self, path: str) -> Dict[str, Any]:
+        """Measure a folder and ask each storage backend about it.
+
+        This exists because the expensive way to learn a folder is too big
+        is to start uploading it: a provider can restrict the account long
+        before the backup finishes, and undoing that takes days.
+        """
+        if not path:
+            raise ConfigError("choose a folder first")
+        eng = Engine(self.m, self.k, workers=self.workers)
+        try:
+            survey = eng.survey(Path(path).expanduser())
+            limits = eng.check_limits(survey)
+        finally:
+            eng.close()
+
+        flat = []
+        for name, issues in limits.items():
+            for issue in issues:
+                flat.append({"storage": name, "level": issue.level,
+                             "message": issue.message,
+                             "detail": issue.detail})
+        blocked = any(i["level"] == "block" for i in flat)
+        return {
+            "path": survey.root,
+            "files": survey.files,
+            "folders": survey.folders,
+            "bytes": survey.bytes,
+            "largest_file": survey.largest_file,
+            "largest_path": survey.largest_path,
+            "max_depth": survey.max_depth,
+            "unreadable": survey.unreadable,
+            "truncated": survey.truncated,
+            "estimated_uploads": survey.estimated_chunks,
+            "seconds": round(survey.seconds, 2),
+            "issues": flat,
+            "blocked": blocked,
+            "can_backup": not blocked and survey.files > 0,
+            "reason": ("this folder has no files to back up"
+                       if survey.files == 0 else ""),
+        }
+
     # -- backing up -------------------------------------------------------
-    def start_backup(self, path: str, redundancy: int = 1) -> BackupJob:
+    def start_backup(self, path: str, redundancy: int = 1,
+                     force: bool = False) -> BackupJob:
         if not path:
             raise ConfigError("choose a folder first")
         if not Path(path).expanduser().is_dir():
             raise ConfigError("not a folder: " + path)
         if not self.m.backends(only_enabled=True):
             raise ConfigError("add somewhere to store the backup first")
+        if not force:
+            # Checked here as well as in the interface, so the rule holds
+            # however the backup was started.
+            check = self.preflight(path)
+            if check["blocked"]:
+                first = next(i for i in check["issues"]
+                             if i["level"] == "block")
+                raise ConfigError(first["message"] + " " + first["detail"])
         job = BackupJob(id=uuid.uuid4().hex[:12],
                         path=str(Path(path).expanduser()))
         with self._lock:

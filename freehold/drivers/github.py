@@ -20,10 +20,11 @@ import os
 import re
 import threading
 import time
-from typing import Any, Dict, Iterator, List, Optional, Tuple
+from typing import Any, Dict, Iterator, List, Optional, Tuple  # noqa: F401
 
 from ..core import credstore
-from ..core.driver import BackendStats, StorageDriver, register
+from ..core.driver import (BackendStats, Limit, StorageDriver,
+                           register)
 from ..core.errors import (BackendUnavailable, ChunkNotFound, ConfigError,
                            QuotaExceeded)
 from .githubapi import GitHubAPI
@@ -81,6 +82,15 @@ class GitHubDriver(StorageDriver):
         self.lfs_max = _as_int(config.get("lfs_max"), 1024 * 1024)
         self.lfs_quota = _as_int(config.get("lfs_quota"), DEFAULT_LFS_QUOTA)
         self.lfs_warn_at = float(config.get("lfs_warn_at") or 0.8)
+        # Guards against the two things that actually get accounts
+        # restricted: bulk repository creation, and request floods.
+        self.max_new_repos = _as_int(config.get("max_new_repos"), 8)
+        # GitHub allows roughly 5,000 authenticated requests an hour. A run
+        # that needs more than one hour's entire budget is the kind of thing
+        # that gets accounts restricted, so it has to be asked for.
+        self.max_calls_per_run = _as_int(config.get("max_calls"), 5000)
+        self.provision_pause = float(config.get("provision_pause") or 2.0)
+        self._last_provision = 0.0
         self.warnings: List[str] = []
         self._asset_cache: Dict[str, Dict[str, int]] = {}
         # Guards pool bookkeeping and the asset-id cache. Uploads and
@@ -109,6 +119,12 @@ class GitHubDriver(StorageDriver):
         self.state.set(POOL_KEY, pool)
 
     def _provision(self, pool: Dict[str, Any]) -> Dict[str, Any]:
+        # Creating repositories back to back looks like abuse to GitHub,
+        # and an account restriction costs far more than a short wait.
+        gap = time.time() - self._last_provision
+        if self._last_provision and gap < self.provision_pause:
+            time.sleep(self.provision_pause - gap)
+        self._last_provision = time.time()
         n = len(pool["repos"]) + 1
         while True:
             name = "%s-%03d" % (self.prefix, n)
@@ -381,6 +397,78 @@ class GitHubDriver(StorageDriver):
                                "chunks": r.get("chunks", 0)}
                               for r in pool["repos"]],
                     "warnings": list(self.warnings)})
+
+    def preflight(self, survey) -> List[Any]:
+        """What this folder will cost on GitHub, said before it starts.
+
+        GitHub is a code host being used as a blob store, and it polices
+        that with abuse detection as well as published limits. The things
+        that actually get accounts restricted are volume of API calls and
+        rapid repository creation, so those are what this estimates.
+        """
+        issues: List[Any] = []
+
+        with self._lock:
+            pool = self._pool()
+        existing = len(pool.get("repos") or [])
+        active_room = 0
+        for r in pool.get("repos") or []:
+            if r.get("status") == "active":
+                active_room = max(0, self.soft_cap
+                                  - _as_int(r.get("bytes"), 0))
+        new_repos = 0
+        if survey.bytes > active_room:
+            new_repos = -(-(survey.bytes - active_room) // self.soft_cap)
+
+        calls = survey.estimated_chunks + new_repos * 3
+
+        if new_repos > self.max_new_repos:
+            issues.append(Limit(
+                "block",
+                "This folder would need about %d new private repositories."
+                % new_repos,
+                "GitHub restricts accounts that create repositories in bulk. "
+                "Back up a smaller folder, raise soft_cap so each repository "
+                "holds more, or use disk or S3 storage for something this "
+                "size."))
+        elif new_repos >= 3:
+            issues.append(Limit(
+                "warn",
+                "About %d new private repositories will be created."
+                % new_repos,
+                "They are made one at a time with a pause between, to stay "
+                "clear of GitHub's abuse detection."))
+
+        if calls > self.max_calls_per_run:
+            issues.append(Limit(
+                "block",
+                "This needs about %s uploads, more than GitHub allows in an "
+                "hour." % f"{calls:,}",
+                "GitHub permits roughly 5,000 requests an hour, and going "
+                "well beyond that is what gets accounts restricted. Back up "
+                "a smaller folder, or send this one to disk or S3 storage "
+                "instead, which have no request limit."))
+        elif calls > 1500:
+            issues.append(Limit(
+                "warn",
+                "About %s uploads, so this will take a while." % f"{calls:,}",
+                "That is within GitHub's hourly allowance, but not by much."))
+
+        if survey.files and survey.bytes / max(survey.files, 1) < 8192:
+            issues.append(Limit(
+                "warn",
+                "This folder is mostly very small files (%s of them)."
+                % f"{survey.files:,}",
+                "Each one still costs an upload, so a folder like this is "
+                "slow on GitHub even though it is not large. A disk or S3 "
+                "backend handles it better."))
+
+        if existing + new_repos > 40:
+            issues.append(Limit(
+                "warn",
+                "Your repository pool would grow to about %d repositories."
+                % (existing + new_repos), ""))
+        return issues
 
     def drain_warnings(self) -> List[str]:
         with self._lock:

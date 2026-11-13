@@ -12,7 +12,8 @@ import threading
 from typing import Any, Dict, Iterator, List, Optional
 
 from ..core import credstore
-from ..core.driver import BackendStats, StorageDriver, register
+from ..core.driver import (BackendStats, Limit, StorageDriver,
+                           register)
 from ..core.errors import ConfigError
 from .s3api import S3API
 
@@ -130,6 +131,18 @@ class S3Driver(StorageDriver):
             detail={"bucket": self.bucket, "prefix": self.prefix,
                     "endpoint": self.api.host, "region": self.api.region,
                     "warnings": list(self.warnings)})
+
+    def preflight(self, survey) -> List[Any]:
+        issues: List[Any] = []
+        used = _as_int(self._usage().get("bytes"), 0)
+        if self.quota and used + survey.bytes > self.quota:
+            issues.append(Limit(
+                "warn",
+                "This would take you past the %d GB you configured as the "
+                "limit for this storage." % (self.quota // GIB),
+                "Going over usually costs money rather than failing. Raise "
+                "quota= if that is expected."))
+        return issues
 
     def drain_warnings(self) -> List[str]:
         with self._lock:

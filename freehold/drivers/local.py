@@ -10,7 +10,8 @@ import tempfile
 from pathlib import Path
 from typing import Any, Dict, Iterator
 
-from ..core.driver import BackendStats, StorageDriver, register
+from ..core.driver import (BackendStats, Limit, StorageDriver,
+                           register)
 from ..core.errors import BackendUnavailable, ChunkNotFound, ConfigError
 
 
@@ -77,6 +78,27 @@ class LocalDriver(StorageDriver):
                 count += 1
         return BackendStats(bytes_stored=total, chunk_count=count,
                             detail={"path": str(self.root)})
+
+    def preflight(self, survey):
+        """Refuse to start a backup the disk cannot hold."""
+        import shutil
+        issues = []
+        try:
+            free = shutil.disk_usage(str(self.root)).free
+        except OSError:
+            return issues
+        if survey.bytes > free:
+            issues.append(Limit(
+                "block",
+                "There is not enough room: this folder is %.1f GB and the "
+                "drive has %.1f GB free."
+                % (survey.bytes / 1024 ** 3, free / 1024 ** 3),
+                "Free up space or choose different storage."))
+        elif survey.bytes > free * 0.8:
+            issues.append(Limit(
+                "warn",
+                "This would use most of the free space on that drive.", ""))
+        return issues
 
     def health(self) -> None:
         self._fail_if_simulated()

@@ -322,20 +322,81 @@ async function browse(path) {
       data.path ? "No folders inside this one."
                 : "Choose a starting point above."))]));
 
-  const choose = $("picker-choose");
+  const choose = $("picker-check");
   choose.disabled = !data.path;
   choose.textContent = data.path
-    ? "Back up " + (data.path.split(/[\\/]/).filter(Boolean).pop() || data.path)
-    : "Back up this folder";
+    ? "Check " + (data.path.split(/[\\/]/).filter(Boolean).pop() || data.path)
+    : "Check this folder";
 }
 
-$("picker-choose").addEventListener("click", (ev) => {
+/* Measure the folder and ask each storage backend about it before any
+   upload starts. Finding out mid-backup that a provider will not take
+   something is how accounts get restricted. */
+$("picker-check").addEventListener("click", (ev) => {
   const path = state.pickerPath;
   if (!path) return;
-  $("picker").hidden = true;
-  $("picker-hint").textContent = path;
+  busy(ev.target, "Measuring…", () => guard(async () => {
+    const pf = await api("/api/preflight?path=" + encodeURIComponent(path));
+    state.preflight = pf;
+    $("picker").hidden = true;
+    $("picker-hint").textContent = path;
+    renderPreflight(pf);
+  }, "Could not check that folder"));
+});
+
+$("pf-back").addEventListener("click", () => {
+  $("preflight").hidden = true;
+  openPicker();
+});
+
+function renderPreflight(pf) {
+  const box = $("preflight");
+  box.hidden = false;
+  box.className = "preflight" + (pf.blocked ? " blocked" : "");
+  $("pf-title").textContent = pf.blocked
+    ? "This folder cannot be backed up as it is"
+    : pf.files === 0 ? "Nothing to back up"
+      : "Ready to back up";
+
+  $("pf-facts").replaceChildren(
+    fact("Files", [pf.files.toLocaleString() + (pf.truncated ? "+" : ""), ""]),
+    fact("Size", bytes(pf.bytes)),
+    fact("Uploads needed", [pf.estimated_uploads.toLocaleString(), ""]),
+    fact("Largest file", bytes(pf.largest_file)),
+  );
+
+  const issues = pf.issues.map((i) => el("div", {
+    class: "pf-issue " + i.level,
+  },
+    el("strong", {}, i.level === "block" ? "Cannot continue" : "Worth knowing"),
+    el("p", {}, i.message),
+    i.detail ? el("p", { class: "muted sm" }, i.detail) : null,
+    el("p", { class: "muted sm" }, "Storage: " + i.storage)));
+
+  if (pf.unreadable) {
+    issues.push(el("div", { class: "pf-issue warn" },
+      el("strong", {}, "Worth knowing"),
+      el("p", {}, pf.unreadable.toLocaleString() +
+        " item(s) could not be read and will be skipped.")));
+  }
+  if (!issues.length && pf.files > 0) {
+    issues.push(el("p", { class: "muted sm" },
+      "No problems found. Measured in " + pf.seconds + " seconds."));
+  }
+  $("pf-issues").replaceChildren(...issues);
+
+  const go = $("pf-go");
+  go.disabled = !pf.can_backup;
+  go.textContent = pf.can_backup ? "Back up this folder"
+    : pf.blocked ? "Blocked" : (pf.reason || "Nothing to back up");
+}
+
+$("pf-go").addEventListener("click", (ev) => {
+  const path = state.preflight && state.preflight.path;
+  if (!path) return;
   busy(ev.target, "Starting…", () => guard(async () => {
     await api("/api/backup", { path });
+    $("preflight").hidden = true;
     pollBackups();
   }, "Backup"));
 });

@@ -139,6 +139,8 @@ class Handler(BaseHTTPRequestHandler):
             return api.settings()
         if path == "/api/folders":
             return {"folders": api.watched_folders()}
+        if path == "/api/preflight":
+            return api.preflight(q.get("path", ""))
         if path == "/api/browse-local":
             return api.local_folders(q.get("path", ""))
         if path == "/api/backups":
@@ -176,7 +178,8 @@ class Handler(BaseHTTPRequestHandler):
                                         str(body.get("value", "")))
         if path == "/api/backup":
             job = api.start_backup(str(body.get("path", "")),
-                                   int(body.get("redundancy", 1)))
+                                   int(body.get("redundancy", 1)),
+                                   bool(body.get("force")))
             return 202, asdict(job)
         if path == "/api/folders/forget":
             return 200, api.forget_folder(str(body["path"]))

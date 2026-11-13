@@ -9,6 +9,44 @@ from .errors import ConfigError
 
 
 @dataclass
+class Survey:
+    """What a folder would cost to back up, measured before starting.
+
+    Lives here rather than in the engine because drivers are handed one in
+    `preflight` and must be able to name the type without reaching into
+    engine internals.
+    """
+    root: str
+    files: int = 0
+    folders: int = 0
+    bytes: int = 0
+    largest_file: int = 0
+    largest_path: str = ""
+    max_depth: int = 0
+    unreadable: int = 0
+    truncated: bool = False
+    seconds: float = 0.0
+
+    @property
+    def estimated_chunks(self) -> int:
+        """Roughly how many separate uploads this becomes. A file smaller
+        than one chunk still costs one upload, which is what makes a tree of
+        many tiny files expensive regardless of its size."""
+        if not self.files:
+            return 0
+        from .chunker import AVG_SIZE
+        return int(max(self.files, self.bytes // AVG_SIZE))
+
+
+@dataclass
+class Limit:
+    """Something a storage backend wants said before a backup starts."""
+    level: str                  # "block" or "warn"
+    message: str
+    detail: str = ""
+
+
+@dataclass
 class BackendStats:
     bytes_stored: int = 0
     chunk_count: int = 0
@@ -72,6 +110,16 @@ class StorageDriver(ABC):
     # -- optional ---------------------------------------------------------
     def stats(self) -> BackendStats:
         return BackendStats()
+
+    def preflight(self, survey) -> List[Any]:
+        """Say whether this backend will accept a folder, before it starts.
+
+        Receives a core Survey (file count, bytes, largest file, depth) and
+        returns core Limit objects with level "warn" or "block". The engine
+        does not interpret them; it only asks and reports. A backend that
+        has no limits worth mentioning returns nothing.
+        """
+        return []
 
     def drain_warnings(self) -> List[str]:
         """Return and clear anything the driver wants the user to know about

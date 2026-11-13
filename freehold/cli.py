@@ -133,9 +133,61 @@ def cmd_backend(args) -> int:
     return 0
 
 
+def cmd_check(args) -> int:
+    """Measure a folder and ask each storage whether it will take it."""
+    m, k = _open(args)
+    eng = Engine(m, k, workers=args.workers)
+    survey = eng.survey(Path(args.path))
+    limits = eng.check_limits(survey, args.backend or None)
+    eng.close()
+    m.close()
+
+    print("%s\n  %s files%s, %s, about %s uploads, deepest %d levels"
+          % (survey.root, f"{survey.files:,}",
+             "+" if survey.truncated else "", human(survey.bytes),
+             f"{survey.estimated_chunks:,}", survey.max_depth))
+    if survey.largest_path:
+        print("  largest: %s (%s)" % (survey.largest_path,
+                                      human(survey.largest_file)))
+    if survey.unreadable:
+        print("  %d item(s) could not be read and will be skipped"
+              % survey.unreadable)
+
+    blocked = False
+    for name, issues in sorted(limits.items()):
+        for issue in issues:
+            blocked = blocked or issue.level == "block"
+            print("\n%-5s [%s] %s" % (issue.level.upper(), name,
+                                      issue.message))
+            if issue.detail:
+                print("      " + issue.detail)
+    if not limits:
+        print("\nok: every storage will take this")
+    return 2 if blocked else 0
+
+
 def cmd_backup(args) -> int:
     m, k = _open(args)
     eng = Engine(m, k, redundancy=args.redundancy, workers=args.workers)
+    if not args.force:
+        survey = eng.survey(Path(args.path))
+        limits = eng.check_limits(survey, args.backend or None)
+        blockers = [(n, i) for n, issues in limits.items() for i in issues
+                    if i.level == "block"]
+        if blockers:
+            eng.close()
+            m.close()
+            name, issue = blockers[0]
+            print("refusing to start: " + issue.message, file=sys.stderr)
+            if issue.detail:
+                print("  " + issue.detail, file=sys.stderr)
+            print("  run 'freehold check %s' for the full picture, or "
+                  "--force to go ahead anyway" % args.path, file=sys.stderr)
+            return 2
+        for name, issues in limits.items():
+            for issue in issues:
+                print("note [%s]: %s" % (name, issue.message),
+                      file=sys.stderr)
     seen = [0]
 
     def progress(rel, res):
@@ -242,10 +294,17 @@ def cmd_doctor(args) -> int:
         print("ok: every backup can be restored from storage that answers")
         return 0
     if args.fix:
-        print("\nrepaired: %d snapshot(s) marked failed, %d orphaned block "
-              "record(s) removed" % (r["repaired"], r["purged"]))
-        print("Those folders are no longer protected. Back them up again "
-              "once your storage works.")
+        if r["repaired"] or r["purged"]:
+            print("\nrepaired: %d snapshot(s) marked failed, %d orphaned "
+                  "block record(s) removed" % (r["repaired"], r["purged"]))
+            print("Those folders are no longer protected. Back them up "
+                  "again once your storage works.")
+        else:
+            # Saying "repaired: 0" after a previous run already fixed
+            # everything reads like a failure. It is the opposite.
+            print("\nNothing needed repairing. The problems above are "
+                  "configuration, not damaged records:")
+            print("fix or remove the storage listed, then back up again.")
         return 0
     print("\nRun 'freehold doctor --fix' to mark these as failed so they "
           "stop being offered as backups.")
@@ -578,7 +637,15 @@ def build_parser() -> argparse.ArgumentParser:
     s.add_argument("--redundancy", type=int, default=1,
                    help="how many backends each chunk goes to")
     s.add_argument("--quiet", action="store_true")
+    s.add_argument("--force", action="store_true",
+                   help="back up even if storage says it is too large")
     s.set_defaults(fn=cmd_backup)
+
+    s = sub.add_parser("check", help="measure a folder and see whether your "
+                                     "storage will accept it")
+    s.add_argument("path")
+    s.add_argument("--backend", action="append")
+    s.set_defaults(fn=cmd_check)
 
     s = sub.add_parser("snapshots", help="list snapshots")
     s.add_argument("--device")

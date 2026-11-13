@@ -29,7 +29,7 @@ from typing import (Any, Dict, Iterable, List, Optional, Sequence, Set,
 
 from . import chunker
 from .crypto import KeyRing, sha256
-from .driver import StorageDriver, build_driver
+from .driver import Limit, StorageDriver, Survey, build_driver
 from .errors import (BackendUnavailable, ChunkNotFound, FreeholdError,
                      IntegrityError)
 from .manifest import Backend, Manifest, ManifestState, Snapshot
@@ -166,6 +166,54 @@ class Engine:
             b = self.m.backend_by_id(bid)
             if b:
                 out.append(b.name)
+        return out
+
+    # -- looking before leaping -------------------------------------------
+    def survey(self, root: Path, excludes: Iterable[str] = DEFAULT_EXCLUDES,
+               limit: int = 250_000) -> Survey:
+        """Walk a folder and measure it without reading any file contents."""
+        root = Path(root).resolve()
+        if not root.is_dir():
+            raise FreeholdError("not a directory: " + str(root))
+        started = time.time()
+        out = Survey(root=str(root))
+        base_depth = len(root.parts)
+        for abs_path, rel in _walk(root, list(excludes)):
+            if out.files >= limit:
+                out.truncated = True
+                break
+            try:
+                size = abs_path.lstat().st_size
+            except OSError:
+                out.unreadable += 1
+                continue
+            out.files += 1
+            out.bytes += size
+            if size > out.largest_file:
+                out.largest_file = size
+                out.largest_path = rel
+            depth = len(abs_path.parts) - base_depth
+            out.max_depth = max(out.max_depth, depth)
+        out.folders = sum(1 for _ in root.rglob("*") if _.is_dir()) \
+            if not out.truncated else 0
+        out.seconds = time.time() - started
+        return out
+
+    def check_limits(self, survey: Survey,
+                     backends: Optional[Sequence[str]] = None
+                     ) -> Dict[str, List[Limit]]:
+        """Ask each backend whether it will accept this much.
+
+        The core has no opinion about what is too big; it only asks. What
+        counts as too large is the backend's business, which is why this
+        returns whatever each one says rather than deciding here.
+        """
+        out: Dict[str, List[Limit]] = {}
+        for b in self._write_targets(backends):
+            checker = getattr(self.driver(b), "preflight", None)
+            issues = list(checker(survey)) if callable(checker) else []
+            if issues:
+                out[b.name] = issues
         return out
 
     # -- backup -----------------------------------------------------------
