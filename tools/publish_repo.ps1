@@ -21,7 +21,7 @@ param(
     [string]$Name = "Freehold",
     [switch]$Public,
     [switch]$GoPublic,
-    [string]$Description = "Vendor-agnostic, client-encrypted, deduplicating backup for PC and mobile. Your files are chunked, deduplicated and encrypted before they leave the machine; GitHub, R2, B2 or a disk are interchangeable dumb blob stores underneath."
+    [string]$Description = "Escape backup lock-in. Files are encrypted on your own machine, then stored on GitHub, Cloudflare R2, Backblaze B2 or any disk - and you can switch provider without re-uploading anything."
 )
 
 $ErrorActionPreference = "Stop"

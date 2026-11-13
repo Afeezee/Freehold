@@ -2,6 +2,11 @@ name: release
 
 # Builds the downloadable apps and attaches them to a GitHub Release.
 #
+# Actions minutes are free on public repositories and billed on private
+# ones. If this repository is private, or Actions is unavailable for any
+# other reason, tools/publish_release.ps1 does the same job from your own
+# machine using binaries you have already built.
+#
 # Nothing here has, needs, or can reach any of your credentials. The
 # artefacts contain no tokens: whoever runs them supplies their own.
 #

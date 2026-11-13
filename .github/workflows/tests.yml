@@ -8,6 +8,11 @@ on:
 
 jobs:
   test:
+    # Actions minutes are free on public repositories and billed on
+    # private ones. While this repo is private, run only when asked for
+    # explicitly, so a billing problem cannot block every push.
+    if: github.event.repository.visibility == 'public' ||
+        github.event_name == 'workflow_dispatch'
     strategy:
       fail-fast: false
       matrix:
