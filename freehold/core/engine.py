@@ -34,8 +34,29 @@ from .errors import (BackendUnavailable, ChunkNotFound, FreeholdError,
                      IntegrityError)
 from .manifest import Backend, Manifest, ManifestState, Snapshot
 
-DEFAULT_EXCLUDES = (".freehold", ".git/objects", "*.tmp", "~$*",
-                    "Thumbs.db", ".DS_Store")
+#: Skipped unless the caller says otherwise. Everything here is either
+#: Freehold's own state, a temporary file, or something a tool regenerates
+#: from files that ARE backed up. A developer's project folder is mostly
+#: node_modules by file count, and backing that up costs thousands of
+#: uploads to protect nothing: deleting it and running an install command
+#: restores it exactly.
+#:
+#: Deliberately absent: dist, build, out, target. Those names are also used
+#: for work people would be upset to lose, and a backup tool guessing wrong
+#: about that is worse than storing a few megabytes it did not need to.
+DEFAULT_EXCLUDES = (
+    ".freehold",
+    ".git/objects",
+    # package manager and build caches
+    "node_modules", "bower_components", ".pnpm-store", ".yarn/cache",
+    "__pycache__", "*.pyc", ".venv", "venv", ".tox", ".eggs", "*.egg-info",
+    ".gradle", ".m2/repository", "Pods",
+    # tool caches that rebuild themselves
+    ".next", ".nuxt", ".svelte-kit", ".parcel-cache", ".turbo",
+    ".cache", ".mypy_cache", ".pytest_cache", ".ruff_cache", ".ipynb_checkpoints",
+    # scratch and operating system clutter
+    "*.tmp", "~$*", "Thumbs.db", ".DS_Store", "desktop.ini",
+)
 DEFAULT_WORKERS = 8
 CACHE_CHUNKS = 64
 
@@ -55,6 +76,10 @@ class BackupResult:
     dropped_files: int = 0
     #: True when the snapshot was abandoned: nothing at all was stored.
     failed: bool = False
+    #: Backends that were written to but still do not hold every block this
+    #: snapshot needs, because deduplication skipped blocks already stored
+    #: somewhere else. Such a backend cannot restore on its own.
+    incomplete: List[str] = field(default_factory=list)
     errors: List[str] = field(default_factory=list)
     warnings: List[str] = field(default_factory=list)
     seconds: float = 0.0
@@ -236,12 +261,14 @@ class Engine:
         inflight: List[Tuple[bytes, Future]] = []
         submitted: Set[bytes] = set()
         failed: Dict[bytes, str] = {}
+        missing: Set[str] = set()
         # Bounds memory: at most this many sealed chunks queued or in transit.
         slots = threading.Semaphore(self.workers * 2)
         try:
             with ThreadPoolExecutor(max_workers=self.workers,
                                     thread_name_prefix="fh-put") as pool:
-                ctx = (pool, slots, inflight, submitted, targets)
+                ctx = (pool, slots, inflight, submitted, targets,
+                       missing)
                 for abs_path, rel in _walk(root, ex):
                     try:
                         self._backup_one(sid, device, str(root), abs_path, rel,
@@ -258,6 +285,13 @@ class Engine:
             # be offered as one. Reporting "complete, 0 files" after every
             # upload failed is the worst outcome this program can produce:
             # it looks exactly like a folder that happened to be empty.
+            res.incomplete = sorted(missing)
+            for name in res.incomplete:
+                res.warnings.append(
+                    name + " does not hold a complete copy on its own: some "
+                    "blocks were already stored elsewhere and so were not "
+                    "sent again. Run 'freehold sync " + name + "' to fill "
+                    "the gaps.")
             res.failed = res.files == 0 and (bool(failed) or bool(res.errors))
             self.m.finish_snapshot(sid, "failed" if res.failed else "complete",
                                    res.files, res.total_size,
@@ -275,7 +309,7 @@ class Engine:
 
     def _backup_one(self, sid: int, device: str, root: str, abs_path: Path,
                     rel: str, res: BackupResult, ctx) -> None:
-        pool, slots, inflight, submitted, targets = ctx
+        pool, slots, inflight, submitted, targets, missing = ctx
         st = abs_path.lstat()
         if stat.S_ISLNK(st.st_mode):
             self.m.add_file(sid, rel, st.st_mode, 0, st.st_mtime_ns, None,
@@ -290,6 +324,13 @@ class Engine:
             fid = self.m.add_file(sid, rel, st.st_mode, st.st_size,
                                   st.st_mtime_ns, prior["content_hash"])
             n = self.m.copy_file_chunks(prior["id"], fid)
+            # An unchanged file is not re-read, but a backend added since
+            # the last run still will not hold its blocks. Checking here
+            # means "nothing changed" never hides "and one copy is short".
+            for target in targets:
+                if (target.name not in missing
+                        and self.m.backend_is_missing_chunks(fid, target.id)):
+                    missing.add(target.name)
             res.files += 1
             res.unchanged_files += 1
             res.total_size += st.st_size
@@ -306,7 +347,17 @@ class Engine:
                 whole.update(piece)
                 h = sha256(piece)
                 res.chunks_seen += 1
-                if h not in submitted and not self.m.chunk_locations(h):
+                locations = self.m.chunk_locations(h)
+                if locations:
+                    # Deduplication is global: a block already stored
+                    # anywhere is not uploaded again. That is right for
+                    # saving bandwidth and wrong for assuming each backend
+                    # holds a full copy, so note which ones do not.
+                    held = {bid for bid, _ in locations}
+                    for target in targets:
+                        if target.id not in held:
+                            missing.add(target.name)
+                if h not in submitted and not locations:
                     enc = self.k.seal(h, piece)
                     # The chunk row goes in now so file_chunk's foreign key is
                     # satisfied; chunk_location follows when the upload lands.

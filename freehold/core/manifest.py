@@ -491,6 +491,21 @@ class Manifest:
             "ORDER BY s.started_at DESC LIMIT 1", (device, root, path)
         ).fetchone()
 
+    def backend_is_missing_chunks(self, file_id: int,
+                                  backend_id: int) -> bool:
+        """Does this backend lack any block this file needs?
+
+        One indexed query per file, so it is cheap enough to ask even on a
+        run where nothing changed — which is exactly when a backend can
+        quietly be missing data nobody re-uploaded.
+        """
+        row = self.db.execute(
+            "SELECT 1 FROM file_chunk fc WHERE fc.file_id = ? AND NOT EXISTS "
+            "(SELECT 1 FROM chunk_location cl WHERE cl.chunk_hash = "
+            "fc.chunk_hash AND cl.backend_id = ?) LIMIT 1",
+            (file_id, backend_id)).fetchone()
+        return row is not None
+
     def copy_file_chunks(self, src_file_id: int, dst_file_id: int) -> int:
         rows = list(self.db.execute(
             "SELECT idx, chunk_hash, offset FROM file_chunk WHERE file_id=?",
