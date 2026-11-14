@@ -221,9 +221,14 @@ def cmd_backup(args) -> int:
 def cmd_snapshots(args) -> int:
     m, _ = _open(args, need_key=False)
     for s in m.snapshots(args.device, complete_only=not args.all):
-        print("%-5d %-16s %-16s %6d files %10s  %s" % (
+        note = ""
+        if s.dropped:
+            note = "  (%d NOT stored)" % s.dropped
+        if s.status != "complete":
+            note = "  [%s]%s" % (s.status, note)
+        print("%-5d %-16s %-16s %6d files %10s  %s%s" % (
             s.id, s.device, when(s.started_at), s.file_count,
-            human(s.total_size), s.root))
+            human(s.total_size), s.root, note))
     m.close()
     return 0
 

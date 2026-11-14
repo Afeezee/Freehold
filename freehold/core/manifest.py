@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS snapshot (
     completed_at INTEGER,
     status       TEXT NOT NULL,    -- running | complete | failed
     file_count   INTEGER NOT NULL DEFAULT 0,
+    dropped      INTEGER NOT NULL DEFAULT 0,
     total_size   INTEGER NOT NULL DEFAULT 0,
     new_bytes    INTEGER NOT NULL DEFAULT 0
 );
@@ -126,6 +127,7 @@ class Snapshot:
     file_count: int
     total_size: int
     new_bytes: int
+    dropped: int = 0
 
 
 @dataclass
@@ -173,10 +175,29 @@ class Manifest:
         self.db.execute("PRAGMA foreign_keys = ON")
         self.db.execute("PRAGMA journal_mode = WAL")
         self.db.executescript(SCHEMA)
+        self._migrate()
         if self.get_meta("schema_version") is None:
             self.set_meta("schema_version", SCHEMA_VERSION)
             self.set_meta("manifest_id", uuid.uuid4().hex)
         self.db.commit()
+
+    def _migrate(self) -> None:
+        """Add columns that later versions need, without touching data.
+
+        CREATE TABLE IF NOT EXISTS does nothing to a table that already
+        exists, so a manifest written by an older version keeps its old
+        shape until something like this widens it.
+        """
+        have = {r["name"] for r in self.db.execute(
+            "PRAGMA table_info(snapshot)")}
+        if "dropped" not in have:
+            # How many files could not be stored. Kept on the snapshot
+            # because the run's own report is gone the moment the process
+            # ends, and "7 files" reads very differently from "7 files, 5
+            # could not be stored".
+            self.db.execute("ALTER TABLE snapshot ADD COLUMN dropped "
+                            "INTEGER NOT NULL DEFAULT 0")
+            self.db.commit()
 
     def close(self) -> None:
         self.db.commit()
@@ -317,11 +338,13 @@ class Manifest:
         return int(cur.lastrowid)
 
     def finish_snapshot(self, sid: int, status: str, file_count: int,
-                        total_size: int, new_bytes: int) -> None:
+                        total_size: int, new_bytes: int,
+                        dropped: int = 0) -> None:
         self.db.execute(
             "UPDATE snapshot SET completed_at=?, status=?, file_count=?, "
-            "total_size=?, new_bytes=? WHERE id=?",
-            (int(time.time()), status, file_count, total_size, new_bytes, sid))
+            "total_size=?, new_bytes=?, dropped=? WHERE id=?",
+            (int(time.time()), status, file_count, total_size, new_bytes,
+             dropped, sid))
         self.db.commit()
 
     def add_file(self, snapshot_id: int, path: str, mode: int, size: int,
@@ -344,9 +367,11 @@ class Manifest:
             [(h,) for _, h, _ in chunks])
 
     def _snapshot(self, row: sqlite3.Row) -> Snapshot:
+        keys = row.keys()
         return Snapshot(row["id"], row["device"], row["root"],
                         row["started_at"], row["completed_at"], row["status"],
-                        row["file_count"], row["total_size"], row["new_bytes"])
+                        row["file_count"], row["total_size"], row["new_bytes"],
+                        row["dropped"] if "dropped" in keys else 0)
 
     _SNAP_Q = ("SELECT s.*, d.name AS device FROM snapshot s "
                "JOIN device d ON d.id = s.device_id")

@@ -295,7 +295,7 @@ class Engine:
             res.failed = res.files == 0 and (bool(failed) or bool(res.errors))
             self.m.finish_snapshot(sid, "failed" if res.failed else "complete",
                                    res.files, res.total_size,
-                                   res.bytes_uploaded)
+                                   res.bytes_uploaded, res.dropped_files)
             if res.failed:
                 res.errors.insert(0, "nothing was backed up: no storage "
                                      "accepted any of this folder's data")
